@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+*.db
+*.jsonl
+*.json
+*.csv
+data/
+data180/
+cache/
+logs/
+plans/
+raw/
