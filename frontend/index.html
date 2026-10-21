@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#142536" />
+    <title>Zone desk | Future Bitget</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Zone desk, trang chủ">
+        <span class="brand-mark" aria-hidden="true">Z</span>
+        <span>zone desk</span>
+      </a>
+      <div class="environment"><span class="pulse" aria-hidden="true"></span> Demo / dry-run</div>
+      <button class="button button-quiet" id="reset-button" type="button">Xóa dữ liệu demo</button>
+    </header>
+
+    <main class="shell">
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="intro-kicker">Future Bitget · Local workspace</p>
+          <h1 id="page-title">Vùng thử nghiệm</h1>
+          <p class="intro-copy">Tạo zone, ghi nhận quan sát và kiểm tra trạng thái. Mọi dữ liệu chỉ nằm trên trình duyệt này.</p>
+        </div>
+        <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có lệnh giao dịch</strong></span></div>
+      </section>
+
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section class="workspace" aria-label="Bàn điều khiển zone">
+        <aside class="zone-rail" aria-labelledby="zones-heading">
+          <div class="section-heading">
+            <div><p class="eyebrow">Sổ theo dõi</p><h2 id="zones-heading">Zone <span id="zone-count" class="count">0</span></h2></div>
+          </div>
+          <div id="zone-list" class="zone-list"></div>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-symbol" aria-hidden="true">＋</div>
+            <h3>Chưa có zone nào</h3>
+            <p>Tạo một zone preview để bắt đầu kiểm tra luồng local.</p>
+          </div>
+        </aside>
+
+        <div class="work-area">
+          <section class="panel create-panel" aria-labelledby="create-heading">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Cấu hình mới</p><h2 id="create-heading">Tạo zone preview</h2></div>
+              <span class="step-tag">Bắt đầu ở PREVIEW</span>
+            </div>
+            <form id="create-form" novalidate>
+              <div class="form-grid form-grid-top">
+                <label class="field"><span>Symbol</span><input name="symbol" placeholder="BTCUSDT" maxlength="32" autocomplete="off" required /><small>Ví dụ: BTCUSDT</small></label>
+                <label class="field"><span>Hướng</span><select name="side"><option value="long">Long</option><option value="short">Short</option></select><small>Chọn hướng mô phỏng</small></label>
+                <label class="field"><span>Giá tham chiếu</span><input name="ref_price" inputmode="decimal" placeholder="65000" required /><small>Phải lớn hơn 0</small></label>
+              </div>
+              <div class="form-grid form-grid-risk">
+                <label class="field"><span>Giới hạn lỗ zone <i>tùy chọn</i></span><input name="zone_loss_limit_usdt" inputmode="decimal" placeholder="25.00" /><small>USDT · lớn hơn 0</small></label>
+                <label class="field"><span>Stop-loss <i>tùy chọn</i></span><div class="input-suffix"><input name="sl_pct" inputmode="decimal" placeholder="2.5" /><span>%</span></div><small>Nhập ít nhất một giới hạn risk</small></label>
+                <div class="form-action"><button class="button button-primary" type="submit">Tạo preview</button></div>
+              </div>
+              <p class="form-error" id="create-error" role="alert" hidden></p>
+            </form>
+          </section>
+
+          <section class="panel detail-panel" aria-labelledby="detail-heading">
+            <div class="panel-heading detail-heading">
+              <div><p class="eyebrow">Zone đã chọn</p><h2 id="detail-heading">Chi tiết &amp; quan sát</h2></div>
+              <div class="selected-id" id="selected-id">Chưa chọn zone</div>
+            </div>
+            <div id="detail-empty" class="detail-empty">Chọn một zone trong sổ theo dõi để xem trạng thái và ghi nhận observation.</div>
+            <div id="detail-content" hidden>
+              <div class="detail-summary" id="detail-summary"></div>
+              <div class="observation-layout">
+                <form id="sync-form" class="sync-form" novalidate>
+                  <div class="subheading"><h3>Ghi observation</h3><span>mock / local</span></div>
+                  <div class="form-grid observation-grid">
+                    <label class="field"><span>Mark price</span><input name="mark_price" inputmode="decimal" placeholder="65000" /></label>
+                    <label class="field"><span>Realized PnL</span><input name="realized_pnl" inputmode="decimal" value="0" /></label>
+                    <label class="field"><span>Unrealized PnL</span><input name="unrealized_pnl" inputmode="decimal" value="0" /></label>
+                    <label class="field"><span>Fees</span><input name="fees" inputmode="decimal" value="0" /></label>
+                    <label class="field"><span>Funding đã trả</span><input name="funding_paid" inputmode="decimal" value="0" /></label>
+                    <label class="field"><span>Funding đã nhận</span><input name="funding_received" inputmode="decimal" value="0" /></label>
+                  </div>
+                  <p class="form-error" id="sync-error" role="alert" hidden></p>
+                  <div class="sync-actions"><button class="button button-secondary" id="activate-button" type="button">Kích hoạt local</button><button class="button button-primary" type="submit">Ghi observation</button></div>
+                </form>
+                <section class="latest-observation" aria-labelledby="latest-heading">
+                  <div class="subheading"><h3 id="latest-heading">Observation gần nhất</h3></div>
+                  <div id="observation-result" class="observation-result"></div>
+                </section>
+              </div>
+              <p class="risk-disclaimer">Kết quả risk là mô phỏng local, không bảo đảm mức lỗ tối đa.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+      <footer><span>Zone foundation · chạy trên thiết bị của bạn</span><span id="local-state">Lưu trong trình duyệt</span></footer>
+    </main>
+  </body>
+</html>
