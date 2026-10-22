@@ -30,6 +30,85 @@
 
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
+      <section class="panel policy-panel" aria-labelledby="policy-heading">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Áp dụng toàn subaccount</p><h2 id="policy-heading">Cài đặt giới hạn rủi ro</h2></div>
+          <span class="step-tag" id="policy-version">Chưa lưu policy</span>
+        </div>
+        <form id="policy-form" class="policy-form" novalidate>
+          <div class="policy-form-grid">
+            <label class="field">
+              <span>Vốn được cấp</span>
+              <div class="input-suffix"><input name="granted_capital" inputmode="decimal" required /><span>USDT</span></div>
+              <small>Trần vốn AI được quản lý, không phải mức lỗ</small>
+            </label>
+            <label class="field">
+              <span>Quyền AI</span>
+              <select name="ai_autonomy" required>
+                <option value="PROPOSAL_ONLY">Chỉ ghi proposal</option>
+                <option value="MANAGED_ZONE" selected>Quản lý zone đã mở</option>
+                <option value="AUTONOMOUS_WITHIN_MANDATE">Tự chủ trong mandate</option>
+              </select>
+              <small>Mode tự chủ chỉ lưu cấu hình, frontend local không tự giao dịch</small>
+            </label>
+            <label class="field">
+              <span>Daily loss limit</span>
+              <div class="input-suffix"><input name="daily_loss_limit_pct" inputmode="decimal" value="20" required /><span>%</span></div>
+              <small>% equity đầu ngày · reset 00:00 UTC</small>
+            </label>
+            <label class="field">
+              <span>Khi chạm daily loss</span>
+              <select name="daily_loss_action" required>
+                <option value="FREEZE_ENTRY" selected>Khóa entry mới</option>
+                <option value="EMERGENCY_FLATTEN">Đóng khẩn cấp dry-run</option>
+              </select>
+              <small>Local paper/dry-run; không gửi lệnh sàn</small>
+            </label>
+            <label class="field">
+              <span>Chuỗi lỗ tối đa</span>
+              <input name="max_consecutive_losses" inputmode="numeric" value="3" required />
+              <small>Sau ngưỡng này khóa entry, không reset bằng đổi symbol</small>
+            </label>
+            <label class="field">
+              <span>Cooldown sau chuỗi lỗ</span>
+              <input name="loss_streak_cooldown" placeholder="24h" required />
+              <small>Thời gian khóa entry; chỉ lưu, chưa tự mở lại</small>
+            </label>
+            <label class="field">
+              <span>Drawdown limit</span>
+              <div class="input-unit"><input name="drawdown_limit" inputmode="decimal" required /><select name="drawdown_unit" aria-label="Đơn vị drawdown"><option value="pct">%</option><option value="usdt">USDT</option></select></div>
+              <small>Áp dụng cho toàn subaccount</small>
+            </label>
+            <label class="field">
+              <span>Mốc tính drawdown</span>
+              <select name="drawdown_reference" required>
+                <option value="">Chọn mốc tham chiếu</option>
+                <option value="equity_peak">Equity đỉnh</option>
+                <option value="day_start">Equity đầu ngày</option>
+                <option value="policy_start">Equity lúc lưu policy</option>
+              </select>
+              <small>Chỉ lưu lựa chọn, chưa tính từ equity thật</small>
+            </label>
+            <label class="field">
+              <span>Leverage tối đa</span>
+              <div class="input-suffix"><input name="max_leverage" inputmode="decimal" required /><span>×</span></div>
+              <small>Bot không được vượt mức này</small>
+            </label>
+            <label class="field policy-symbols">
+              <span>Symbol được phép</span>
+              <input name="symbol_allowlist" autocomplete="off" placeholder="BTCUSDT, ETHUSDT" required />
+              <small>Phân tách bằng dấu phẩy. Chỉ symbol bạn nhập mới được chọn cho zone.</small>
+            </label>
+          </div>
+          <div class="policy-footer">
+            <p class="policy-note">Isolated margin cố định. Entry, DCA và TP dùng limit; lệnh thoát khẩn cấp dùng market reduce-only. Daily loss, drawdown và chuỗi lỗ chỉ được lưu, chưa tính từ equity thật. AUTONOMOUS không tự chạy trên frontend local. Policy lưu cục bộ; thay đổi tạo version mới.</p>
+            <button class="button button-primary" type="submit">Lưu policy version</button>
+          </div>
+          <p class="form-error" id="policy-error" role="alert" hidden></p>
+          <div class="policy-history" id="policy-history" aria-label="Lịch sử policy đã lưu"></div>
+        </form>
+      </section>
+
       <section class="workspace" aria-label="Bàn điều khiển zone">
         <aside class="zone-rail" aria-labelledby="zones-heading">
           <div class="section-heading">
@@ -51,13 +130,14 @@
             </div>
             <form id="create-form" novalidate>
               <div class="form-grid form-grid-top">
-                <label class="field"><span>Symbol</span><input name="symbol" placeholder="BTCUSDT" maxlength="32" autocomplete="off" required /><small>Ví dụ: BTCUSDT</small></label>
+                <label class="field"><span>Symbol được phép</span><select name="symbol" id="zone-symbol" required><option value="">Lưu policy trước</option></select><small>Chọn trong allowlist của policy hiện tại</small></label>
                 <label class="field"><span>Hướng</span><select name="side"><option value="long">Long</option><option value="short">Short</option></select><small>Chọn hướng mô phỏng</small></label>
                 <label class="field"><span>Giá tham chiếu</span><input name="ref_price" inputmode="decimal" placeholder="65000" required /><small>Phải lớn hơn 0</small></label>
               </div>
               <div class="form-grid form-grid-risk">
-                <label class="field"><span>Giới hạn lỗ zone <i>tùy chọn</i></span><input name="zone_loss_limit_usdt" inputmode="decimal" placeholder="25.00" /><small>USDT · lớn hơn 0</small></label>
-                <label class="field"><span>Stop-loss <i>tùy chọn</i></span><div class="input-suffix"><input name="sl_pct" inputmode="decimal" placeholder="2.5" /><span>%</span></div><small>Nhập ít nhất một giới hạn risk</small></label>
+                <label class="field"><span>Giới hạn lỗ zone</span><input name="zone_loss_limit_usdt" inputmode="decimal" placeholder="25.00" required /><small>USDT · hard loss control</small></label>
+                <label class="field"><span>Rủi ro tối đa mỗi lệnh</span><input name="max_order_risk_usdt" inputmode="decimal" placeholder="5.00" required /><small>USDT · lớn hơn 0</small></label>
+                <label class="field"><span>Stop-loss chiến lược <i>tùy chọn</i></span><div class="input-suffix"><input name="sl_pct" inputmode="decimal" placeholder="2.5" /><span>%</span></div><small>Có thể bỏ; hard loss control vẫn bắt buộc</small></label>
                 <div class="form-action"><button class="button button-primary" type="submit">Tạo preview</button></div>
               </div>
               <p class="form-error" id="create-error" role="alert" hidden></p>

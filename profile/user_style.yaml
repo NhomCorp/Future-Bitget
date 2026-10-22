@@ -1,0 +1,10 @@
+# Profile phong cách do người dùng xác nhận.
+# Spec: ../specs/user-style-profile.md
+# File append-only: không sửa/xóa entry cũ; thay đổi bằng version mới.
+# `kind`: no_trade | preference | note
+# `source`: user
+# `channel`: manual | mcp_chat
+# `status`: active | retired
+# no_trade bắt buộc có `condition` máy đọc được.
+# Không ghi risk limit, leverage, margin, vốn hoặc max_zones tại đây.
+entries: []

@@ -1,14 +1,27 @@
 # Spec: AI Agent tự phân tích và giao dịch có hạn mức
 
-- Trạng thái: Đã duyệt định hướng; thông số hạn mức cụ thể và triển khai live vẫn chờ chốt/phê duyệt riêng
+- Trạng thái: Dự thảo cập nhật 2026-10-22, chờ chủ dự án duyệt. Bản trước đã duyệt giới hạn AI ở proposal-only và chỉ quản lý zone do người dùng mở; bản này mở quyền tự chủ có kiểm soát trong mandate.
 - Thiết kế triển khai: [`ai-agent-implementation-design.md`](ai-agent-implementation-design.md)
 - Phạm vi: Thiết kế nghiệp vụ cho AI Agent giao dịch Bitget USDT-M Futures trong hạn mức được cấp
 - Không phải giấy phép bật live: mọi triển khai thực tế phải đi qua các cổng Demo, paper trading, shadow và live vốn nhỏ
 - Tài liệu liên quan: `specs/zone-risk-policy.md`, `specs/zone-auto-trade-ai-plan.md`
+- Policy P0 đã duyệt: [`zone-policy-decisions.md`](zone-policy-decisions.md)
+
+## 0. Thay đổi so với bản đã duyệt
+
+- AI được cấp một khoản vốn và tự chủ mở, quản lý, đóng vị thế trong mandate (`AUTONOMOUS_WITHIN_MANDATE`). Điều này thay đổi quyết định trước đây "AI chỉ quản lý zone/vị thế người dùng mở"; bản cập nhật này đề xuất thay quyết định đó bằng ba mode quyền tại mục 3. Quyết định vẫn ở trạng thái chờ duyệt.
+- Bổ sung giới hạn chuỗi lệnh lỗ, cooldown sau chuỗi lỗ, hành động khi chạm lỗ ngày và các luật chống gồng lệnh.
+- Bổ sung phạm vi kiến thức người dùng và học offline của AI.
+- Chưa chốt và không được tự đặt: số vốn, tỷ lệ rủi ro mỗi lệnh, lỗ tối đa ngày, drawdown tối đa, số lệnh lỗ liên tiếp, leverage và allowlist. Chủ dự án phải nhập và xác nhận từng giá trị trước khi mandate được kích hoạt.
+- Các cổng P0 đến P4 vẫn giữ nguyên. Bản này không phải giấy phép bật live.
+
+Tự chủ nghĩa là AI được tự quyết trong mandate. AI không có quyền thay đổi mandate, thêm vốn, nới giới hạn, mở rộng allowlist hay bỏ qua Risk Engine. Trong P0/P1, AI vẫn chỉ tạo proposal; quyền tự mở vị thế chỉ bật sau khi các cổng đạt và có xác nhận riêng.
 
 ## 1. Mục tiêu
 
-Xây dựng một AI Agent có thể tự thu thập dữ liệu, phân tích cơ hội, tạo quyết định và gửi lệnh giao dịch Bitget trong một phạm vi quyền hạn cố định do chủ tài khoản cấp. Agent được tự chủ về thời điểm và hành động giao dịch trong phạm vi đó, nhưng không được tự tăng ngân sách, nới rủi ro, thay đổi policy hoặc truy cập quyền ngoài giao dịch.
+Xây dựng một AI Agent có thể tự thu thập dữ liệu, phân tích cơ hội, tạo quyết định và gửi lệnh giao dịch Bitget trong một phạm vi quyền hạn cố định do chủ tài khoản cấp. Người dùng cấp vốn cho một subaccount/mandate; Agent được tự chủ mở, quản lý và đóng các vị thế Futures trong phạm vi đó, nhưng không được tự tăng ngân sách, nới rủi ro, thay đổi policy hoặc truy cập quyền ngoài giao dịch.
+
+Vốn được cấp là trần vốn và phạm vi quản lý, không phải mức lỗ được phép. Hệ thống phải tách `granted_capital`, margin, exposure, rủi ro danh nghĩa mỗi lệnh, loss budget, daily loss và drawdown. Mọi con số vận hành phải do người dùng nhập và xác nhận; không suy diễn giá trị mặc định để bật giao dịch.
 
 Mục tiêu của hệ thống là kiểm soát được quyền hạn, rủi ro, trạng thái lệnh và khả năng truy vết của từng quyết định. Hệ thống không cam kết lợi nhuận và không coi dự đoán của AI là bảo đảm kết quả.
 
@@ -30,7 +43,7 @@ Mục tiêu của hệ thống là kiểm soát được quyền hạn, rủi ro
 
 ### 2.2 Ngoài phạm vi MVP
 
-- Tự mở zone hoặc tự cấp thêm ngân sách.
+- Tự điều chỉnh hoặc tự tăng `granted_capital`.
 - Tự nạp, rút hoặc chuyển margin.
 - Quyền withdrawal trên API key Bitget.
 - Tự thay đổi model, provider, policy, risk limit hoặc allowlist khi đang chạy.
@@ -38,25 +51,33 @@ Mục tiêu của hệ thống là kiểm soát được quyền hạn, rủi ro
 - Tự giao dịch ngoài symbol, side, leverage, margin mode hoặc timeframe được cấp.
 - Tự triển khai code, thay secret hoặc thay quyền hệ thống.
 
+Trong MVP, quyền `AUTONOMOUS_WITHIN_MANDATE` chỉ được bật sau các cổng paper/Demo/shadow tương ứng. Trước cổng đó, hệ thống chỉ cho `PROPOSAL_ONLY` hoặc `MANAGED_ZONE`.
+
 ## 3. Mô hình quyền hạn của Agent
 
 Agent được cấp một `trading mandate` bất biến cho mỗi episode hoặc zone. Mandate gồm:
 
 - `mandate_id`, `version`, thời điểm bắt đầu và hết hạn.
 - Subaccount được phép sử dụng.
+- `ai_autonomy`: `PROPOSAL_ONLY`, `MANAGED_ZONE` hoặc `AUTONOMOUS_WITHIN_MANDATE`.
+- `granted_capital`: vốn tối đa người dùng cấp cho mandate; không được tự tăng bởi AI.
+- `capital_currency`: đơn vị kế toán của vốn được cấp, mặc định theo tài sản ký quỹ của subaccount.
 - Symbol và side được phép.
 - Chế độ margin và leverage tối đa.
-- Vốn tối đa được cấp cho mandate.
 - Exposure và margin tối đa.
 - Rủi ro tối đa cho mỗi lệnh.
 - Tổng loss budget của zone hoặc episode.
 - Lỗ tối đa trong ngày và trong chu kỳ mandate.
 - Số vị thế mở và số lệnh tối đa.
+- `max_consecutive_losses`, `loss_streak_scope`, `loss_streak_cooldown`.
+- `daily_loss_action`: `FREEZE_ENTRY` hoặc `EMERGENCY_FLATTEN`.
+- `allow_average_down` và plan DCA cụ thể nếu được phép.
+- Quy tắc reset ngày và cách tính realized/unrealized PnL, phí, funding.
 - Tốc độ đặt lệnh tối đa theo khoảng thời gian.
 - Loại lệnh được phép.
 - Bắt buộc có stop-loss, take-profit hoặc emergency policy theo chế độ đã chọn.
 - Thời gian không được giao dịch, nếu có.
-- Trạng thái `enabled`, `paused`, `stopping`, `expired`, `revoked`.
+- Trạng thái `enabled`, `paused`, `stopping`, `cooldown`, `expired`, `revoked`.
 
 Các giá trị trên do người dùng hoặc policy đã duyệt đặt trước. Agent chỉ được đọc, không được ghi hoặc nới chúng. Thay đổi mandate phải tạo version mới và áp dụng cho episode mới, không sửa đè mandate đang chạy.
 
@@ -66,11 +87,14 @@ Các giá trị trên do người dùng hoặc policy đã duyệt đặt trư�
 2. Risk Engine không phụ thuộc vào câu trả lời tự do của AI và không dùng AI để quyết định hard limit.
 3. Khi dữ liệu giá, số dư, vị thế hoặc trạng thái lệnh bị thiếu hoặc quá cũ, hệ thống không được mở thêm rủi ro.
 4. Khi chạm hard limit, hệ thống hủy entry/DCA chưa khớp, chặn lệnh làm tăng size và chạy emergency policy đã duyệt.
-5. Khi không xác nhận được trạng thái sau khi gửi lệnh, chuyển sang `UNKNOWN`, không gửi lệnh bù hoặc lệnh mới dựa trên giả định.
-6. Không cấp lại loss budget sau khi giảm size hoặc đóng một phần.
-7. Không coi loss limit là cam kết lỗ thực tế tuyệt đối. Gap, slippage, phí, funding, lỗi sàn và thanh lý có thể làm vượt ngưỡng.
-8. API Bitget chỉ được cấp quyền đọc và trade, tắt withdrawal. Secret chỉ tồn tại ở backend hoặc secret store.
-9. Có kill switch độc lập với AI. Kill switch phải chặn lệnh tăng rủi ro và kích hoạt quy trình xử lý đã duyệt.
+5. Khi đạt `daily_loss_limit`, hệ thống phải khóa entry mới; nếu mandate chọn `EMERGENCY_FLATTEN` thì hủy lệnh chờ và đóng/giảm vị thế theo policy.
+6. Khi đạt `max_consecutive_losses`, hệ thống chuyển `COOLDOWN`, khóa entry mới và không được reset bằng cách đổi symbol, zone, model hoặc strategy.
+7. Không được nới SL theo hướng tăng rủi ro, tăng size để bù lỗ, hoặc mở lệnh mới chỉ để gỡ một lệnh đang lỗ. DCA/average-down chỉ hợp lệ khi mandate cho phép và plan đã được kiểm tra.
+8. Khi không xác nhận được trạng thái sau khi gửi lệnh, chuyển sang `UNKNOWN`, không gửi lệnh bù hoặc lệnh mới dựa trên giả định.
+9. Không cấp lại loss budget sau khi giảm size hoặc đóng một phần.
+10. Không coi loss limit là cam kết lỗ thực tế tuyệt đối. Gap, slippage, phí, funding, lỗi sàn và thanh lý có thể làm vượt ngưỡng.
+11. API Bitget chỉ được cấp quyền đọc và trade, tắt withdrawal. Secret chỉ tồn tại ở backend hoặc secret store.
+12. Có kill switch độc lập với AI. Kill switch phải chặn lệnh tăng rủi ro và kích hoạt quy trình xử lý đã duyệt.
 
 Risk theo zone dùng định nghĩa trong `specs/zone-risk-policy.md`, gồm loss budget, stop theo mark price, phí, funding, trạng thái `STOPPING` và `UNKNOWN`.
 
@@ -250,7 +274,7 @@ Mỗi lần tăng symbol, vốn, leverage hoặc quyền hành động phải t�
 2. Proposal vượt symbol, side, quantity, leverage hoặc vốn được cấp bị Risk Engine từ chối.
 3. Lệnh đã gửi bị timeout không tạo lệnh trùng sau retry.
 4. Partial fill và restart khôi phục đúng vị thế sau reconcile.
-5. Chạm loss budget hoặc daily loss chuyển state đúng và chặn lệnh tăng rủi ro.
+5. Chạm loss budget, daily loss hoặc `max_consecutive_losses` chuyển state đúng và chặn lệnh tăng rủi ro.
 6. Stop theo mark price đúng chiều Long và Short.
 7. Loss đã thực hiện không được cấp lại sau khi giảm vị thế.
 8. Kill switch không phụ thuộc vào việc AI còn phản hồi hay không.
@@ -258,20 +282,22 @@ Mỗi lần tăng symbol, vốn, leverage hoặc quyền hành động phải t�
 10. Audit truy được từ snapshot, decision, risk check đến order và fill mà không lộ secret.
 11. Dùng mock, paper hoặc Demo cho toàn bộ test kỹ thuật. Không dùng tài khoản thật để kiểm thử.
 12. Có thể tắt live bằng cấu hình độc lập và ứng dụng mặc định khởi động ở paper hoặc Demo.
+13. `AUTONOMOUS_WITHIN_MANDATE` chỉ được bật sau khi người dùng cấp `granted_capital`, xác nhận mandate và hoàn thành cổng kiểm chứng tương ứng.
 
 ## 12. Các quyết định cần chủ dự án chốt
 
 1. Hạn mức vốn ban đầu cho mỗi mandate và mỗi zone là bao nhiêu?
 2. Rủi ro tối đa mỗi lệnh tính theo USDT, phần trăm vốn hay phần trăm loss budget?
-3. Daily loss limit, drawdown limit và số lệnh tối đa là bao nhiêu?
-4. Leverage tối đa, symbol allowlist và margin mode mặc định là gì?
-5. Agent được tự mở vị thế trong mandate hay chỉ được quản lý zone do người dùng mở?
-6. Agent được tự đặt market order hay chỉ limit order trong giai đoạn đầu?
-7. Stop-loss bắt buộc đặt trên sàn, hay emergency policy nội bộ là đủ ở từng giai đoạn?
-8. Khi chạm limit, hệ thống market close toàn bộ hay dùng emergency policy theo từng zone?
-9. Live mode có cần xác nhận từng mandate, hay cho phép chạy tự động sau một lần bật rõ ràng?
-10. Chọn Gemini native, OpenAI-compatible, hay cho phép cả hai ngay từ MVP?
-11. Các giá trị `TBD` phải được lưu trong config version và từ chối bật live khi chưa điền đủ hay dùng giá trị mặc định an toàn?
+3. Daily loss limit, drawdown limit, `max_consecutive_losses` và cooldown là bao nhiêu?
+4. Khi chạm daily loss, chọn `FREEZE_ENTRY` hay `EMERGENCY_FLATTEN`?
+5. Leverage tối đa, symbol allowlist và margin mode mặc định là gì?
+6. `AUTONOMOUS_WITHIN_MANDATE` được bật sau cổng nào và cần xác nhận bật live một lần hay từng mandate?
+7. Agent được tự đặt market order hay chỉ limit order trong giai đoạn đầu?
+8. Stop-loss bắt buộc đặt trên sàn, hay emergency policy nội bộ là đủ ở từng giai đoạn?
+9. Khi chạm limit, hệ thống market close toàn bộ hay dùng emergency policy theo từng zone?
+10. Cho phép average-down/DCA không, và nếu có thì plan nào được duyệt?
+11. Chọn Gemini native, OpenAI-compatible, hay cho phép cả hai ngay từ MVP?
+12. Các giá trị `TBD` phải được lưu trong config version và từ chối bật live khi chưa điền đủ hay dùng giá trị mặc định an toàn?
 
 ## 13. Ràng buộc triển khai
 

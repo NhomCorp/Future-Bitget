@@ -4,7 +4,7 @@
 
 Đây là sổ tay tra cứu trước khi khảo sát, sửa code hoặc thay đổi cách vận hành dự án. Rule tự động áp dụng riêng repo nằm trong [`CLAUDE.md`](CLAUDE.md). Sổ tay này chỉ ra mảng công việc, điểm bắt đầu, nguồn nghiệp vụ và các giới hạn đã biết.
 
-Repo hiện là bộ script Python cho Bitget USDT-M futures. **Chưa có frontend web, CLI package thống nhất hoặc backend service production riêng.** Không xem nội dung dự thảo là chức năng đã có.
+Repo hiện là bộ script Python cho Bitget USDT-M futures, kèm frontend local Demo/dry-run. **Chưa có frontend production, CLI package thống nhất hoặc backend service production riêng.** Không xem nội dung dự thảo là chức năng đã có.
 
 ### Trạng thái thông tin
 
@@ -18,17 +18,17 @@ Repo hiện là bộ script Python cho Bitget USDT-M futures. **Chưa có fronte
 | Mảng / việc cần làm | Bắt đầu tại | Đọc cùng | Trạng thái và lưu ý |
 |---|---|---|---|
 | Spec, quyết định nghiệp vụ | [`spec/SPEC.md`](spec/SPEC.md) hoặc [`specs/zone-auto-trade-ai-plan.md`](specs/zone-auto-trade-ai-plan.md) | Mục 3 dưới đây | Hai tài liệu mô tả hai hướng khác nhau, không tự hợp nhất |
-| AI Agent tự giao dịch có hạn mức | [`specs/ai-agent-autonomous-trading.md`](specs/ai-agent-autonomous-trading.md) | [`specs/ai-agent-implementation-design.md`](specs/ai-agent-implementation-design.md), `specs/zone-risk-policy.md`, `ai_proposal/`, `executor/` | Định hướng đã duyệt; thiết kế P1 paper/P2 Demo đã ghi; hạn mức cụ thể và live vẫn chờ chốt/phê duyệt riêng |
-| Giao diện, output, CLI | Các `main()`/script liên quan; [`README.md`](README.md) | `spec/SPEC.md` | CLI package thống nhất: **chưa có**; frontend web: **chưa có** |
-| Tài khoản và vị thế read-only | [`bg.py`](bg.py), [`monitor.py`](monitor.py) | [`trader/bgapi.py`](trader/bgapi.py) | Đã có script đọc và monitor; không phải executor |
+| AI Agent tự giao dịch có hạn mức | [`specs/ai-agent-autonomous-trading.md`](specs/ai-agent-autonomous-trading.md) | [`specs/ai-agent-implementation-design.md`](specs/ai-agent-implementation-design.md), `specs/zone-risk-policy.md`, `ai_proposal/`, `executor/` | Dự thảo cập nhật theo hướng người dùng cấp vốn và AI tự chủ trong mandate; các mode, hạn mức cụ thể, Demo và live vẫn chờ duyệt/xác minh riêng |
+| Giao diện, output, CLI | Các `main()`/script liên quan; [`README.md`](README.md); [`frontend/`](frontend/); [`package.json`](package.json); [`trader/equity_cli.py`](trader/equity_cli.py); [`trader/demo_verify_cli.py`](trader/demo_verify_cli.py) | [`specs/frontend-local.md`](specs/frontend-local.md), [`specs/manual-risk-settings.md`](specs/manual-risk-settings.md), [`specs/demo-verification-checklist.md`](specs/demo-verification-checklist.md) | CLI package thống nhất: **chưa có**; frontend local Demo/dry-run: **đã có**, khởi động `npm start` cổng cố định `3007`; equity CLI GET-only: **đã có**; DemoVerify CLI: **đã có** (GET mặc định; POST D5-D6 cần `--place-orders --i-confirm-demo`); frontend production: **chưa có** |
+| Tài khoản và vị thế read-only | [`bg.py`](bg.py), [`monitor.py`](monitor.py), [`trader/equity_cli.py`](trader/equity_cli.py), [`trader/demo_verify_cli.py`](trader/demo_verify_cli.py) | [`trader/bgapi.py`](trader/bgapi.py), [`trader/bitget_readonly.py`](trader/bitget_readonly.py), [`trader/demo_verify.py`](trader/demo_verify.py) | Đã có script đọc, monitor, snapshot equity GET-only và harness DemoVerify; không phải executor/dispatcher |
 | Bitget API và trader | [`trader/bgapi.py`](trader/bgapi.py) | [`trader/ta.py`](trader/ta.py), `spec/SPEC.md` | Có helper và dry-run; giao dịch live chưa được nghiệm thu |
 | Ladder, chiến lược, risk | [`planner/ladder.py`](planner/ladder.py) | [`planner/PLAN.md`](planner/PLAN.md), `spec/SPEC.md` | Đối chiếu công thức và backtest trước khi đổi tham số |
 | Dữ liệu và backtest | [`backtest/simulator.py`](backtest/simulator.py) | [`backtest/run_backtest.py`](backtest/run_backtest.py), `planner/` | Nghiên cứu; không phải bằng chứng lợi thế hoặc an toàn live |
 | TA và mức giá | [`trader/ta.py`](trader/ta.py), [`trader/snap.py`](trader/snap.py) | `spec/SPEC.md` | TA là bộ lọc rủi ro, không phải dự báo |
-| Journal, audit, PnL | [`journal/journal.py`](journal/journal.py) | [`journal/style_digest.py`](journal/style_digest.py), `profile/` | Giữ lịch sử append-oriented và đối soát PnL |
+| Journal, audit, PnL và profile phong cách | [`journal/journal.py`](journal/journal.py) | [`journal/style_digest.py`](journal/style_digest.py), [`profile/user_style.yaml`](profile/user_style.yaml), [`specs/user-style-profile.md`](specs/user-style-profile.md) | Giữ lịch sử append-oriented; profile người dùng tách khỏi digest tự rút và không được chứa hard limits |
 | Vận hành monitor | [`monitor.py`](monitor.py) | `journal/journal.py`, `README.md` | Có state cục bộ và journal hook; watcher production chưa có |
-| Zone risk policy | [`specs/zone-risk-policy.md`](specs/zone-risk-policy.md) | [`trader/zone_risk.py`](trader/zone_risk.py), [`trader/zone_state.py`](trader/zone_state.py), [`trader/zone_store.py`](trader/zone_store.py), [`executor/zone_executor.py`](executor/zone_executor.py), [`ai_proposal/validator.py`](ai_proposal/validator.py), [`trading/`](trading/) | P0/P1 local deterministic risk and SQLite; P2 dry-run executor intents/events/proposals; P3 AI proposal-only; P1 paper mandate/risk pipeline now exists; no exchange order execution or live trading |
-| Bảo mật | [`trader/bgapi.py`](trader/bgapi.py) | [`README.md`](README.md), `CLAUDE.md` | Không lộ key; live POST guard không được bỏ qua |
+| Zone risk policy và xác minh Demo | [`specs/zone-risk-policy.md`](specs/zone-risk-policy.md) | [`specs/demo-verification-checklist.md`](specs/demo-verification-checklist.md), [`trader/demo_verify.py`](trader/demo_verify.py), [`trader/demo_verify_cli.py`](trader/demo_verify_cli.py), [`trader/zone_risk.py`](trader/zone_risk.py), [`trader/zone_state.py`](trader/zone_state.py), [`trader/zone_store.py`](trader/zone_store.py), [`executor/zone_executor.py`](executor/zone_executor.py), [`ai_proposal/validator.py`](ai_proposal/validator.py), [`trading/`](trading/) | Risk policy đang ở bản dự thảo cập nhật cho mandate và AI tự chủ; Demo GET 2026-10-22 `BTCUSDT` D0–D4 PASS (`isolated`, `hedge_mode`); D5–D15 chưa chạy; chưa có dispatcher hoặc live |
+| Bảo mật | [`trader/bgapi.py`](trader/bgapi.py), [`trader/envfile.py`](trader/envfile.py) | [`README.md`](README.md), [`.env.example`](.env.example), `CLAUDE.md` | Key local điền vào `.env` (gitignored) hoặc OS env; không lộ key; live POST guard không được bỏ qua |
 | Kiểm thử | File test liên quan, hiện có [`planner/test_sim.py`](planner/test_sim.py) | File module được sửa | Chọn kiểm tra hẹp theo thay đổi; không cài gói khi chưa duyệt |
 
 ## 3. Spec và quyết định nghiệp vụ
@@ -36,7 +36,7 @@ Repo hiện là bộ script Python cho Bitget USDT-M futures. **Chưa có fronte
 | Tài liệu | Trạng thái | Dùng khi |
 |---|---|---|
 | [`spec/SPEC.md`](spec/SPEC.md) | Đặc tả kỹ thuật cho công cụ DCA-ladder bán tự động, Wide/Scalp, CLI preview/execute/sync/cancel/kill/status/ta/journal; có giả định Cross margin và ràng buộc risk. | Sửa ladder hiện tại, lệnh, risk, API hoặc luồng công cụ theo đặc tả này. |
-| [`specs/zone-auto-trade-ai-plan.md`](specs/zone-auto-trade-ai-plan.md) | Dự thảo định hướng bot theo zone loss-budget, isolated margin, ledger và các cổng AI. Chưa phải thông số triển khai đã chốt. | Nghiên cứu hoặc soạn spec cho hướng zone/AI; không triển khai nghiệp vụ còn mở. |
+| [`specs/zone-auto-trade-ai-plan.md`](specs/zone-auto-trade-ai-plan.md) | Dự thảo định hướng bot theo mandate cấp vốn, zone loss-budget, isolated margin, ledger và các cổng AI. Policy P0 cũ đã được cập nhật thành bản dự thảo thống nhất với mode AI tự chủ; các con số vận hành, Demo semantics và live vẫn chưa chốt. | Nghiên cứu hoặc soạn spec cho hướng zone/AI; không triển khai nghiệp vụ còn mở. |
 | [`planner/PLAN.md`](planner/PLAN.md) | Kế hoạch/kết quả nghiên cứu planner, không thay thế spec sản phẩm. | Sửa hoặc diễn giải nghiên cứu chiến lược. |
 | [`specs/project-compass.md`](specs/project-compass.md) | Spec đã duyệt cho la bàn ban đầu. | Tham khảo nguồn gốc phạm vi sổ tay. |
 | [`specs/project-handbook.md`](specs/project-handbook.md) | Spec đã duyệt cho sổ tay và rule riêng repo. | Tham khảo mục tiêu/tiêu chí của tài liệu này. |
@@ -50,7 +50,7 @@ Nếu hai spec xung đột, nêu rõ xung đột và hỏi chủ dự án trư�
 - [`bg.py`](bg.py): đọc account và positions qua Bitget v2, xuất JSON.
 - [`monitor.py`](monitor.py): lấy account, positions, lệnh chờ/plan; so sánh `state.json`, in cảnh báo/thay đổi và gọi hook journal sync.
 - Các script planner/backtest có entrypoint riêng.
-- [`frontend/`](frontend/): frontend local-only Demo/dry-run cho zone preview/status/sync; dữ liệu lưu trong browser local storage, không gọi Bitget.
+- [`frontend/`](frontend/): frontend local-only Demo/dry-run cho zone preview/status/sync; dữ liệu lưu trong browser local storage, không gọi Bitget. Khởi động bằng `npm start` ([`package.json`](package.json), [`frontend/server.js`](frontend/server.js)), cổng cố định `3007` (`http://localhost:3007`), chỉ nghe `127.0.0.1`. Form policy có `granted_capital`, 3 mode AI, daily loss/action, chuỗi lỗ/cooldown, drawdown, leverage và allowlist; zone mới snapshot policy version. Daily/drawdown/streak trên frontend chưa tính từ equity thật. CLI/paper có thể gắn features từ snapshot GET khi sổ equity local đủ `day_start`. `AUTONOMOUS_WITHIN_MANDATE` chỉ lưu cấu hình, không tự giao dịch.
 
 ### Chưa có
 
@@ -66,7 +66,11 @@ Khi thay đổi giao diện output, giữ ổn định dữ liệu và thông đ
 | [`bg.py`](bg.py) | Lời gọi Bitget read-only đơn giản và xuất account/positions. |
 | [`monitor.py`](monitor.py) | Đọc trạng thái account/position/order, phát hiện thay đổi và gọi journal. |
 | [`trader/bgapi.py`](trader/bgapi.py) | Public GET, signed read-only GET, trade-key POST, JSONL log, dry-run. |
-| [`trader/bitget_readonly.py`](trader/bitget_readonly.py) | P1 GET-only Bitget adapter using existing read-only env vars; transport injectable for tests. |
+| [`trader/bitget_readonly.py`](trader/bitget_readonly.py) | GET-only Bitget adapter, Demo header `paptrading: 1`, cấm live; transport injectable cho test. Nạp `.env` local khi không truyền `environ`. |
+| [`trader/envfile.py`](trader/envfile.py) | Đọc `.env` local vào process env; không ghi đè biến đã có; không log giá trị. |
+| [`trader/equity_cli.py`](trader/equity_cli.py) | CLI local `snapshot` đọc equity Demo GET-only, in bản đã redaction; bắt buộc `--max-age-seconds`; không dump raw account, không tạo intent. |
+| [`trader/demo_verify.py`](trader/demo_verify.py) | Harness checklist Demo D0-D15: GET baseline, POST Demo có khóa, redaction, phân loại `FOUND`/`REJECTED`/`VERIFIED_NOT_RECEIVED`/`UNKNOWN`. Không phải dispatcher. |
+| [`trader/demo_verify_cli.py`](trader/demo_verify_cli.py) | CLI `run --symbol`; mặc định GET-only; POST D5-D6 cần `--place-orders --i-confirm-demo`; cấm live và `GROK_TRADER_ALLOW_LIVE`; ghi evidence JSONL đã redaction. |
 | [`trader/zone_store.py`](trader/zone_store.py) | P1 SQLite durable zone config/state, observations and append-only audit events. |
 | [`trader/zone_cli.py`](trader/zone_cli.py) | P1 local `preview`, `status`, `sync` mock/dry-run entrypoint; never sends exchange requests. |
 | [`trader/ta.py`](trader/ta.py) | Tính indicator, key levels và ladder risk. |
@@ -75,7 +79,11 @@ Khi thay đổi giao diện output, giữ ổn định dữ liệu và thông đ
 | [`ai_proposal/schema.py`](ai_proposal/schema.py) | P3 immutable decision snapshot, proposal and validation record schemas. |
 | [`ai_proposal/validator.py`](ai_proposal/validator.py) | P3 deterministic hard-limit validator; accepted/rejected result only. |
 | [`ai_proposal/interface.py`](ai_proposal/interface.py) | P3 model/provider-agnostic proposal boundary; no model/network call. |
-| [`ai_proposal/store.py`](ai_proposal/store.py) | P3 append-only JSONL proposal log and replay. |
+| [`trading/mandate.py`](trading/mandate.py) | Paper mandate immutable: vốn cấp, 3 mode AI, daily loss/action, chuỗi lỗ/cooldown, drawdown, leverage, isolated/limit policy. Thiếu field hoặc TBD chặn tăng rủi ro. `AUTONOMOUS_WITHIN_MANDATE` fail-closed, chưa thực thi. |
+| [`trading/risk_engine.py`](trading/risk_engine.py) | Deterministic proposal-to-mandate check; validates loss budget, order risk, leverage, isolated margin, limit/market reduce-only, daily loss, drawdown, loss streak và `allow_average_down`; no dispatch. AUTONOMOUS chặn intent tăng rủi ro. Thiếu/stale equity chặn intent tăng rủi ro. |
+| [`trading/equity_store.py`](trading/equity_store.py) | Sổ SQLite append-only cho số equity đã parse; không lưu secret hay raw response. |
+| [`trading/equity_snapshot.py`](trading/equity_snapshot.py) | Builder GET-only: `day_start_equity` = snapshot cuối trước 00:00 UTC, daily_loss/drawdown local; thiếu/stale thì không bịa số. PaperAgent không gọi module này. |
+| [`trading/paper_agent.py`](trading/paper_agent.py) | Paper pipeline: `PROPOSAL_ONLY` chỉ ghi proposal; `MANAGED_ZONE` tạo paper intent OPEN/CLOSE/REDUCE; AUTONOMOUS bị chặn. `EMERGENCY_FLATTEN` gọi executor dry-run một lần. Không gọi sàn. Caller gắn features equity trước `run()`. |
 
 ### Quy tắc khi sửa API/trader
 
@@ -137,7 +145,9 @@ Kết quả backtest là nghiên cứu. Trước khi dùng làm căn cứ risk/t
 - P1 local zone foundation: SQLite store and CLI mock/dry-run `preview/status/sync`; adapter Bitget GET-only có thể đọc account/position/order/ticker/contract.
 - P2 local dry-run executor tạo intent entry/DCA/cancel/emergency-close với idempotency và state machine fill/timeout/unknown.
 - P3 AI proposal-only lưu snapshot/proposal append-only, deterministic hard-limit validator và audit bridge vào SQLite P1.
-- P1 paper agent đã nối provider protocol, mandate immutable, risk check deterministic và paper intent idempotent vào SQLite; không gọi exchange.
+- P1 paper agent: mandate có vốn/mode AI, risk fail-closed, paper intent OPEN/CLOSE/REDUCE, `PROPOSAL_ONLY` không tạo intent, AUTONOMOUS bị khóa; không gọi exchange.
+- Equity GET-only: adapter → builder features (`day_start`/`daily_loss`/`drawdown`) → CLI local; thiếu sổ ngày trước hoặc stale thì không tăng rủi ro. Chưa phải trigger production và chưa xác minh Demo.
+- DemoVerify harness: CLI GET-only mặc định; POST Demo D5-D6 chỉ khi có `--place-orders --i-confirm-demo`; mock đã cover FOUND/REJECTED/UNKNOWN/VERIFIED_NOT_RECEIVED. Demo GET 2026-10-22 `BTCUSDT`: D0–D4 PASS (`isolated`, `hedge_mode`). D5–D15 chưa chạy.
 - `trader/bgapi.py` có chế độ dry-run và guard cho live POST.
 
 ### Chưa có hoặc chưa nghiệm thu
@@ -146,7 +156,7 @@ Kết quả backtest là nghiên cứu. Trước khi dùng làm căn cứ risk/t
 - Zone state machine và ledger giới hạn lỗ production/reconcile: chưa có; P1 chỉ lưu state/observation local và stop intent dry-run.
 - Dispatcher exchange, WebSocket reconcile production và phục hồi đầy đủ sau restart/reconnect.
 - Kill workflow production đã được kiểm thử đầy đủ.
-- AI proposal có schema/validator/log và P1 paper pipeline, nhưng chưa có model training/evaluation, provider API thật, Demo dispatcher hoặc AI-to-exchange execution.
+- AI proposal có schema/validator/log và P1 paper pipeline, nhưng chưa có model training/evaluation, provider API thật, Demo dispatcher hoặc AI-to-exchange execution. Harness DemoVerify không phải dispatcher.
 - Triển khai live được nghiệm thu.
 - Tailscale gateway.
 
@@ -155,6 +165,7 @@ Không chạy lệnh thay đổi trạng thái tài khoản, gửi lệnh, deplo
 ## 10. Bảo mật và an toàn
 
 - Không in/ghi secret, token, mật khẩu, API key, signature/header ký hoặc dữ liệu tài khoản thật.
+- Key Demo điền vào [`.env`](.env) (gitignored). Bản mẫu: [`.env.example`](.env.example). Không commit `.env`.
 - Dùng key chỉ đọc cho tác vụ đọc. Không đưa trade key vào môi trường test.
 - Không bỏ qua dry-run/live guard; không tự đặt lệnh live.
 - Không tự deploy, push, merge, cài/nâng cấp dependency, tạo/sửa migration hoặc xóa dữ liệu nếu chưa được yêu cầu rõ.
@@ -183,19 +194,21 @@ Test hiện có được thấy trong repo: [`planner/test_sim.py`](planner/test
 
 ## 12. AI và zone
 
-Nguồn định hướng là [`specs/zone-auto-trade-ai-plan.md`](specs/zone-auto-trade-ai-plan.md). Tài liệu đặt các cổng P0–P6 và giới hạn AI proposal-only trước; không đồng nghĩa code đó đã tồn tại.
+Nguồn định hướng là [`specs/zone-auto-trade-ai-plan.md`](specs/zone-auto-trade-ai-plan.md) và [`specs/ai-agent-autonomous-trading.md`](specs/ai-agent-autonomous-trading.md). Ba mode AI đã có trên mandate/frontend/paper: `PROPOSAL_ONLY`, `MANAGED_ZONE`, `AUTONOMOUS_WITHIN_MANDATE`. Mode tự chủ **fail-closed**, chưa được phép mở vị thế.
 
-- Risk engine thuần hàm và lifecycle khô local cho zone: **đã có P0, chưa nối sàn**.
-- P1 zone store SQLite append-oriented lưu config bất biến, state, observation và audit event; CLI local có `preview/status/sync` mock/dry-run.
-- Adapter Bitget P1 chỉ GET, dùng read-only env vars; không có POST hoặc executor production.
+Không dùng số P lẫn giữa spec sản phẩm, cổng AI và code. Cổng đã làm: `LocalContract` + `PaperModes` + `ReadonlyEquity` + harness `DemoVerify` + Demo GET D0–D4. Cổng chưa đóng: Demo D5–D15, `DemoDispatch`, `Shadow`.
+
+- Risk engine thuần hàm và lifecycle khô local cho zone: **đã có, chưa nối sàn**.
+- Zone store SQLite append-oriented lưu config bất biến, state, observation và audit event; CLI local có `preview/status/sync` mock/dry-run.
+- Adapter Bitget chỉ GET, dùng read-only env vars; **đã nối** CLI equity + builder features cho risk/paper (caller gắn tay) và harness DemoVerify. **Chưa nối** frontend. Field `accountEquity` theo contract test local, **chưa xác minh** trên tài khoản Demo.
 - Executor, state machine bền vững theo dữ liệu sàn, reconcile WebSocket và loss-budget ledger production: **chưa có**.
 - Decision opportunity dataset: **chưa có**.
-- P1 paper agent dùng `ai_proposal/provider.py` với provider protocol/fake paper provider; pipeline lưu decision/risk/paper intent qua `executor/p1_adapter.py` và không gọi exchange.
+- Paper agent dùng `ai_proposal/provider.py` với provider protocol/fake; pipeline lưu decision/risk/paper intent qua `executor/p1_adapter.py` và không gọi exchange.
 - AI training/evaluation pipeline và provider API thật: **chưa có**.
-- Demo dispatcher, AI tự gửi lệnh lên sàn và live trading: **chưa có**.
+- Demo dispatcher, AI tự gửi lệnh lên sàn và live trading: **chưa có**. Harness `demo_verify` chỉ ghi evidence; không phải đường thực thi AI.
 - Tailscale gateway: **chưa có**.
 
-P0 không gửi/cancel lệnh và không gọi API. Trước khi nối adapter, phải thiết kế và kiểm thử riêng idempotency, persistence/restart, reconcile, Demo exchange semantics và xác nhận lệnh bảo vệ.
+P0 không gửi/cancel lệnh. Adapter GET-only đã nối CLI equity và harness DemoVerify (GET mặc định). Trước dispatcher Demo phải có bằng chứng D0-D10 trên tài khoản Demo, idempotency, persistence/restart, reconcile và lệnh bảo vệ.
 
 ## 13. Bản đồ luồng hiện tại
 
@@ -207,6 +220,17 @@ Bitget REST read-only
         +--> monitor.py --> state.json --> báo cáo thay đổi/cảnh báo
                          |
                          +--> journal/journal.py --> raw/event/upsert journal
+        |
+        +--> trader/bitget_readonly.py -- GET, paptrading: 1, cấm live
+                    |
+                    +--> trading/equity_snapshot.py --> trading/equity_store.py
+                    |         |
+                    |         +--> features --> caller gắn vào risk_engine / paper_agent
+                    +--> trader/equity_cli.py --> snapshot đã redaction
+                    +--> trader/demo_verify.py --> checklist D0-D15, evidence đã redaction
+                    |         POST D5-D6 chỉ khi --place-orders --i-confirm-demo
+                    |
+                    frontend không gọi nhánh này
 
 Public market data --> planner/ladder.py --> bảng ladder
                   --> planner/sim.py ------> planner/backtest reports

@@ -1,13 +1,16 @@
 # Thiết kế triển khai: AI Agent giao dịch có hạn mức
 
-- Trạng thái: Thiết kế sau khi spec định hướng được duyệt
-- Phạm vi thiết kế: P1 paper trading và P2 Demo trading; chưa triển khai live
+- Trạng thái: Dự thảo cập nhật theo mandate cấp vốn và mode AI tự chủ; chờ spec nghiệp vụ được duyệt
+- Phạm vi thiết kế: P1 paper trading, P2 Demo trading và cổng sau cho `AUTONOMOUS_WITHIN_MANDATE`; chưa triển khai live
 - Spec nguồn: [`ai-agent-autonomous-trading.md`](ai-agent-autonomous-trading.md)
 - Ràng buộc: không gửi lệnh live, không dùng trade key thật, không cài dependency mới trong pha này
 
 ## 1. Mục tiêu triển khai đầu tiên
 
-Tạo một pipeline nối lớp proposal AI hiện có với mandate, Risk Engine và executor dry-run/Demo theo hướng append-only và idempotent. Pha đầu không cấp quyền tự do cho AI và không thay thế state/risk deterministic hiện có.
+- Pha đầu vẫn xây pipeline paper/Demo với `PROPOSAL_ONLY` và `MANAGED_ZONE` để kiểm chứng contract, risk và recovery.
+- Sau khi các cổng kỹ thuật đạt, thêm mode `AUTONOMOUS_WITHIN_MANDATE`: người dùng cấp vốn và mandate; AI được tự mở, quản lý, giảm và đóng vị thế trong allowlist, không cần người dùng mở zone trước.
+- Mọi mode đều đi qua Risk Engine deterministic. Mode tự chủ chỉ thay đổi quyền khởi tạo cơ hội, không thay đổi hard limit, protective policy hoặc yêu cầu reconcile.
+- Không có mode nào cho phép AI tự tăng vốn, nạp/chuyển margin, sửa mandate, mở rộng allowlist hoặc gọi Bitget ngoài executor.
 
 Kết quả P1/P2 phải chứng minh được:
 
@@ -72,11 +75,15 @@ Tên module là thiết kế đề xuất, chưa tạo file cho đến khi kế 
 
 ### 3.3 Risk phase
 
-1. Decision validator kiểm tra field bất biến: mandate, symbol, side, state, snapshot id.
+1. Decision validator kiểm tra field bất biến: mandate, symbol, state, snapshot id và mode tự chủ.
 2. Risk Engine đọc mandate immutable và live snapshot mới nhất.
-3. Kiểm tra freshness, allowlist, lot/tick, exposure, margin, per-order risk, daily loss, loss budget, rate limit, protective order và kill switch.
-4. Risk Engine trả `RiskCheckRecord` append-only.
-5. Chỉ `APPROVED` mới được chuyển sang order intent.
+3. Kiểm tra freshness, allowlist, lot/tick, exposure, margin, granted capital, per-order risk, daily loss, drawdown, loss budget, loss streak, rate limit, loại lệnh và protective policy.
+4. Nếu entry, DCA hoặc take-profit dùng market, từ chối; market chỉ hợp lệ khi là `reduce-only` strategic stop, emergency close hoặc kill switch theo mandate.
+5. Với `PROPOSAL_ONLY`, không tạo order intent. Với `MANAGED_ZONE`, chỉ chấp thuận hành động trong zone đã mở. Với `AUTONOMOUS_WITHIN_MANDATE`, cho phép OPEN tạo zone/episode mới nếu symbol, side, vốn, exposure và giới hạn zone đều hợp lệ.
+6. Kiểm tra `allow_average_down`; nếu false thì từ chối ADD/DCA. Nếu true thì kiểm tra DCA plan, remaining risk budget và không cấp lại budget đã dùng.
+7. Khi daily loss hoặc loss streak đã chạm ngưỡng, trả `PAUSED` cho entry mới; chỉ cho phép reduce/close/protective action theo `daily_loss_action`.
+8. Risk Engine trả `RiskCheckRecord` append-only.
+9. Chỉ `APPROVED` mới được chuyển sang order intent.
 
 ### 3.4 Execution phase
 
@@ -111,14 +118,34 @@ Mandate bất biến theo version, tối thiểu:
 
 ```text
 mandate_id, version, zone_id, subaccount_id
+ai_autonomy, granted_capital, capital_currency
 allowed_symbols, allowed_sides, allowed_order_types
 max_capital, max_exposure, max_margin, max_leverage
 max_order_risk, loss_budget, daily_loss_limit, drawdown_limit
+daily_loss_scope, drawdown_scope, drawdown_reference
+max_consecutive_losses, loss_streak_scope, loss_streak_cooldown
+daily_loss_action, allow_average_down
+margin_mode, entry_order_type, dca_order_type, take_profit_order_type
+strategic_stop_mode, emergency_order_type, kill_switch_order_type
 max_open_positions, max_orders_per_window
 require_protective_stop, mode, valid_from, valid_until, state
 ```
 
-P1 chưa đặt giá trị kinh doanh mặc định. Nếu trường giới hạn cần để `TBD`, mandate không được chuyển sang trạng thái có thể tạo intent tăng rủi ro.
+Quy tắc policy đã chốt cho P0:
+
+- Các giá trị `granted_capital`, loss budget, per-order risk, daily loss, drawdown, leverage và allowlist là cấu hình theo mandate/zone, không hard-code một mức duy nhất.
+- `granted_capital` là trần vốn AI được quản lý; không đồng nghĩa với mức lỗ tối đa và không được tự tăng. Margin, exposure và rủi ro mỗi lệnh được kiểm tra độc lập.
+- Hệ thống được phép đề xuất giới hạn hoặc symbol dựa trên dữ liệu, nhưng người dùng phải xác nhận; đề xuất không tự trở thành policy hay allowlist.
+- `ai_autonomy=AUTONOMOUS_WITHIN_MANDATE` cho phép AI khởi tạo zone/vị thế mới trong allowlist và vốn được cấp. `PROPOSAL_ONLY` chỉ ghi proposal; `MANAGED_ZONE` chỉ quản lý zone đã mở.
+- `margin_mode` là `isolated`; người dùng tự thêm ký quỹ, hệ thống không tự nạp/chuyển/cấp thêm margin.
+- Entry, DCA và take-profit dùng `limit`. Market chỉ dành cho `reduce-only` strategic stop khi được bật, emergency close và kill switch.
+- Khi chạm zone loss limit hoặc daily loss limit, hủy entry/DCA, chặn tăng rủi ro và thực hiện `daily_loss_action` hoặc emergency policy tương ứng.
+- Khi đạt `max_consecutive_losses`, chuyển `COOLDOWN`, chặn entry mới và chỉ khôi phục sau thời gian/phê duyệt được mandate quy định. Không reset loss streak bằng cách đổi symbol, zone hoặc model.
+- `allow_average_down=false` mặc định theo hướng an toàn; khi bật phải có DCA plan và risk budget riêng.
+- Không gồng lệnh: không được nới SL theo hướng tăng rủi ro, tăng size để bù lỗ hoặc tạo lệnh mới để gỡ lệnh đang lỗ.
+- Khi zone đã bắt đầu, config là bất biến; thay đổi phải tạo version mới cho episode mới.
+
+`daily_loss_scope`, `drawdown_scope` và `drawdown_reference` phải được lưu rõ trong mandate. Nếu chưa được xác định, mandate không được chuyển sang trạng thái có thể tạo intent tăng rủi ro. `max_leverage` và các trường vốn/risk bắt buộc cũng phải có giá trị hợp lệ trước P2 Demo. Mặc định của thiết kế là không cho thực thi khi các trường này còn `TBD`, không tự suy diễn giá trị an toàn.
 
 ### 4.2 Decision
 
@@ -225,6 +252,9 @@ Chạy proposal-only/shadow, ghi decision opportunities, so sánh baseline deter
 - Symbol/side/order type ngoài allowlist bị từ chối.
 - Quantity, exposure, leverage, daily loss, loss budget vượt ngưỡng bị từ chối.
 - Mandate hết hạn/revoked/paused không tạo intent.
+- `PROPOSAL_ONLY` không tạo intent; `MANAGED_ZONE` từ chối mở zone chưa có; `AUTONOMOUS_WITHIN_MANDATE` chỉ cho mở khi còn vốn/exposure và policy hợp lệ.
+- Đạt daily loss hoặc `max_consecutive_losses` chuyển `COOLDOWN`/`PAUSED`, chặn entry nhưng vẫn xử lý reduce/close/protective action.
+- `allow_average_down=false` chặn ADD/DCA; khi bật, DCA vượt risk budget bị từ chối.
 - Zone `UNKNOWN`, `STOPPING`, kill switch hoặc stale snapshot chặn tăng rủi ro.
 - Protective stop thiếu khi mandate bắt buộc bị từ chối.
 

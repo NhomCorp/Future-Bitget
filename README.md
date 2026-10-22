@@ -10,12 +10,18 @@ Python scripts for monitoring a Bitget USDT-M futures account (read-only), journ
 
 ## Mở demo frontend local
 
-Không cần cài thêm package. Chạy từ thư mục repo:
+Cổng cố định `3007`. Không cần `npm install`. Chạy từ thư mục repo:
 
 ```bash
-python -m http.server 4173 --directory frontend
+npm start
 ```
 
-Sau đó mở `http://localhost:4173`. Giao diện hỗ trợ tạo zone preview, kích hoạt local và ghi observation mock. Dữ liệu chỉ được lưu trong local storage của trình duyệt.
+Sau đó mở `http://localhost:3007`. Giao diện hỗ trợ tạo zone preview, kích hoạt local và ghi observation mock. Dữ liệu chỉ được lưu trong local storage của trình duyệt.
 
-Secrets come only from env vars (`BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_PASSPHRASE`; trade key later as `BITGET_TRADE_*`). No data files or account history are committed.
+Cách khác (Python):
+
+```bash
+python -m http.server 3007 --bind 127.0.0.1 --directory frontend
+```
+
+Secrets come from a local gitignored `.env` (copy `.env.example`) or OS env vars (`BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_PASSPHRASE`; trade key later as `BITGET_TRADE_*`). No data files or account history are committed.

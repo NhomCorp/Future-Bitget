@@ -1,8 +1,8 @@
 """Read-only Bitget v2 adapter for zone previews and status snapshots.
 
-Only GET requests are exposed. Credentials are read from the existing
-BITGET_API_KEY/BITGET_API_SECRET/BITGET_PASSPHRASE environment variables and
-never returned in snapshots or error text. The adapter can be given a transport
+Only GET requests are exposed. Credentials are read from BITGET_API_KEY/BITGET_API_SECRET/BITGET_PASSPHRASE
+in the process environment or a local `.env` file and never returned in
+snapshots or error text. The adapter can be given a transport
 callable in tests, so no credential or network is needed for unit tests.
 """
 from __future__ import annotations
@@ -17,6 +17,8 @@ import time
 from typing import Any, Callable, Mapping
 import urllib.error
 import urllib.request
+
+from trader.envfile import load_os_env_file
 
 
 API_BASE = "https://api.bitget.com"
@@ -47,6 +49,8 @@ class ReadOnlyCredentials:
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "ReadOnlyCredentials":
+        if environ is None:
+            load_os_env_file()
         env = os.environ if environ is None else environ
         names = ("BITGET_API_KEY", "BITGET_API_SECRET", "BITGET_PASSPHRASE")
         values = tuple(str(env.get(name, "")) for name in names)
@@ -98,6 +102,8 @@ class ReadOnlyBitgetAdapter:
     ):
         if not demo:
             raise LiveModeDisabled("read-only adapter is Demo-only; live mode is disabled")
+        if environ is None:
+            load_os_env_file()
         env_mode = (environ or os.environ).get("BITGET_ENV", "demo").strip().lower()
         if env_mode in {"live", "production", "prod"}:
             raise LiveModeDisabled("BITGET_ENV live/production is disabled for this adapter")

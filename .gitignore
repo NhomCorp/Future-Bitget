@@ -1,9 +1,12 @@
 __pycache__/
+node_modules/
 *.pyc
 .env
+.claude/
 *.db
 *.jsonl
 *.json
+!package.json
 *.csv
 data/
 data180/

@@ -7,8 +7,9 @@ Tạo một giao diện web chạy local để xem và mô phỏng luồng zone 
 
 ### Có
 - Trang dashboard hiển thị danh sách zone local với: zone ID, symbol, side, state, giá tham chiếu và net PnL gần nhất.
-- Form tạo zone preview với các đầu vào bắt buộc: symbol, side (`long`/`short`), ref price; tùy chọn: zone loss limit, SL percent.
-- Nút tạo preview và hiển thị kết quả zone vừa tạo.
+- Form policy subaccount/mandate local: `granted_capital`, autonomy mode, daily loss limit, daily loss action, loss streak/cooldown, drawdown limit/unit/reference, max leverage và symbol allowlist; giá trị 20% daily loss được điền sẵn nhưng phải lưu/xác nhận.
+- Policy lưu version trong local storage; zone mới lưu snapshot policy version. Với mode `MANAGED_ZONE`, zone phải được người dùng tạo; mode `AUTONOMOUS_WITHIN_MANDATE` chỉ được hiển thị/cấu hình, không thực thi tự động trong frontend local.
+- Form tạo zone preview với các đầu vào: symbol từ allowlist, side (`long`/`short`), ref price, zone loss limit, max order risk và SL percent tùy chọn.
 - Chọn một zone để ghi một observation dry-run: mark price, realized PnL, unrealized PnL, fees, funding paid/received.
 - Hiển thị kết quả sync, trạng thái zone và cờ triggered/reason nếu có.
 - Dữ liệu mô phỏng được lưu local để reload trang không mất dữ liệu.
@@ -17,7 +18,7 @@ Tạo một giao diện web chạy local để xem và mô phỏng luồng zone 
 ### Không có
 - Không gọi Bitget hoặc bất kỳ API bên ngoài nào.
 - Không đọc hoặc yêu cầu API key, trade key, mật khẩu hay dữ liệu tài khoản thật.
-- Không gửi, sửa, hủy lệnh và không tự động giao dịch.
+- Không gửi, sửa, hủy lệnh và không tự động giao dịch, kể cả khi policy chọn `AUTONOMOUS_WITHIN_MANDATE`.
 - Không thay đổi logic risk, công thức PnL hoặc state machine trong Python.
 - Không yêu cầu dashboard production, đăng nhập, phân quyền hay deploy.
 
@@ -62,4 +63,4 @@ Tạo một giao diện web chạy local để xem và mô phỏng luồng zone 
 - Người dùng thực hiện được đầy đủ luồng preview, status và sync mà không cần credential.
 - Không có request mạng tới Bitget hoặc dịch vụ bên ngoài.
 - Các test case chính ở mục 6 chạy đúng.
-- Chưa triển khai code cho đến khi spec này được duyệt.
+- Đã triển khai trong frontend local; chưa có backend, Bitget API hoặc giao dịch live.

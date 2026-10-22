@@ -36,7 +36,7 @@ def make_snapshot() -> DecisionOpportunitySnapshot:
             max_size=Decimal("2"),
             max_exposure=Decimal("200"),
         ),
-        features={"trend": "up"},
+        features={"trend": "up", "daily_loss": "0", "day_start_equity": "1000", "daily_loss_at": NOW, "drawdown": "0", "drawdown_unit": "usdt", "consecutive_losses": "0"},
     )
 
 
@@ -58,7 +58,7 @@ def make_proposal(snapshot: DecisionOpportunitySnapshot, **overrides) -> Proposa
         loss_budget=snapshot.loss_budget,
         size=snapshot.size,
         exposure=snapshot.exposure,
-        metadata={"stop_loss": "95"},
+        metadata={"stop_loss": "95", "leverage": "2"},
     )
     fields.update(overrides)
     return ProposalDraft(**fields)
@@ -87,20 +87,42 @@ class PaperAgentTests(unittest.TestCase):
         )
         self.store = P1IntegrationStore(self.zones)
         self.snapshot = make_snapshot()
-        self.mandate = TradingMandate(
+        self.mandate = self._mandate()
+
+    def _mandate(self, **overrides) -> TradingMandate:
+        values = dict(
             mandate_id="mandate-1",
             version=1,
             zone_id="zone-paper",
             allowed_symbols=("BTCUSDT",),
             allowed_sides=("long",),
-            allowed_actions=("OPEN", "NO_TRADE"),
+            allowed_actions=("OPEN", "CLOSE", "REDUCE", "NO_TRADE"),
             max_size=Decimal("1"),
             max_exposure=Decimal("100"),
             loss_budget=Decimal("20"),
             max_order_risk=Decimal("5"),
             valid_from="2026-10-21T09:00:00Z",
             valid_until="2026-10-21T11:00:00Z",
+            daily_loss_limit_pct=Decimal("1"),
+            daily_loss_reference="day_start_equity",
+            daily_loss_reset_time_utc="00:00",
+            drawdown_limit=Decimal("20"),
+            drawdown_unit="usdt",
+            max_leverage=Decimal("3"),
+            daily_loss_scope="subaccount",
+            drawdown_scope="subaccount",
+            drawdown_reference="equity_peak",
+            ai_autonomy="MANAGED_ZONE",
+            granted_capital=Decimal("1000"),
+            capital_currency="USDT",
+            daily_loss_action="FREEZE_ENTRY",
+            max_consecutive_losses=3,
+            loss_streak_scope="subaccount",
+            loss_streak_cooldown="24h",
+            allow_average_down=False,
         )
+        values.update(overrides)
+        return TradingMandate(**values)
 
     def tearDown(self):
         self.store.close()
@@ -127,20 +149,7 @@ class PaperAgentTests(unittest.TestCase):
         self.assertEqual(self.store.agent_events("zone-paper")[0]["event"], "AI_PROVIDER_FAILED")
 
     def test_mandate_rejection_creates_no_intent(self):
-        narrow = TradingMandate(
-            mandate_id="mandate-small",
-            version=1,
-            zone_id="zone-paper",
-            allowed_symbols=("ETHUSDT",),
-            allowed_sides=("long",),
-            allowed_actions=("OPEN",),
-            max_size=Decimal("1"),
-            max_exposure=Decimal("100"),
-            loss_budget=Decimal("20"),
-            max_order_risk=Decimal("5"),
-            valid_from="2026-10-21T09:00:00Z",
-            valid_until="2026-10-21T11:00:00Z",
-        )
+        narrow = self._mandate(mandate_id="mandate-small", allowed_symbols=("ETHUSDT",), allowed_actions=("OPEN",))
         result = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, narrow, now=NOW)
         self.assertEqual(result.risk_check.result, "REJECTED")
         self.assertIn("SYMBOL_NOT_ALLOWED", result.risk_check.reason_codes)
@@ -161,6 +170,61 @@ class PaperAgentTests(unittest.TestCase):
         self.assertEqual(result.risk_check.result, "REJECTED")
         self.assertIn("PROTECTIVE_STOP_REQUIRED", result.risk_check.reason_codes)
         self.assertIsNone(result.intent)
+
+    def test_proposal_only_records_without_intent(self):
+        mandate = self._mandate(ai_autonomy="PROPOSAL_ONLY")
+        result = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+        self.assertIsNone(result.intent)
+        self.assertEqual(self.store.paper_intents("zone-paper"), [])
+        self.assertTrue(any(event["event"] == "RISK_CHECKED" for event in self.store.agent_events("zone-paper")))
+
+    def test_autonomous_mode_creates_no_intent(self):
+        mandate = self._mandate(ai_autonomy="AUTONOMOUS_WITHIN_MANDATE")
+        result = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, mandate, now=NOW)
+        self.assertIsNone(result.intent)
+        self.assertIsNone(result.risk_check)
+        self.assertEqual(self.store.agent_events("zone-paper")[0]["reason_code"], "AUTONOMY_NOT_ENABLED")
+
+    def test_close_creates_reduce_only_paper_intent(self):
+        proposal = make_proposal(
+            self.snapshot,
+            action="CLOSE",
+            metadata={"leverage": "2", "order_type": "limit", "order_role": "reduce", "reduce_only": True},
+        )
+        result = PaperAgent(FakeProvider(proposal), self.store).run(self.snapshot, self.mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+        self.assertTrue(result.intent.reduce_only)
+        self.assertEqual(result.intent.order_role, "reduce")
+        self.assertEqual(self.store.paper_intents("zone-paper")[0]["role"], "reduce")
+        self.assertTrue(self.store.paper_intents("zone-paper")[0]["reduce_only"])
+
+    def test_emergency_flatten_is_recorded_once(self):
+        snapshot = make_snapshot()
+        snapshot = DecisionOpportunitySnapshot(
+            opportunity_id=snapshot.opportunity_id,
+            snapshot_at=snapshot.snapshot_at,
+            feature_as_of=snapshot.feature_as_of,
+            symbol=snapshot.symbol,
+            side=snapshot.side,
+            state=snapshot.state,
+            ref_price=snapshot.ref_price,
+            sl_pct=snapshot.sl_pct,
+            loss_budget=snapshot.loss_budget,
+            size=snapshot.size,
+            exposure=snapshot.exposure,
+            hard_limits=snapshot.hard_limits,
+            features={**dict(snapshot.features), "daily_loss": "10"},
+        )
+        mandate = self._mandate(daily_loss_action="EMERGENCY_FLATTEN")
+        agent = PaperAgent(FakeProvider(make_proposal(snapshot)), self.store)
+        first = agent.run(snapshot, mandate, now=NOW)
+        second = agent.run(snapshot, mandate, now=NOW)
+        self.assertIsNone(first.intent)
+        self.assertIn("DAILY_LOSS_LIMIT", first.risk_check.reason_codes)
+        flatten = [event for event in self.store.agent_events("zone-paper") if event["event"] == "EMERGENCY_FLATTEN_RECORDED"]
+        self.assertEqual(len(flatten), 1)
+        self.assertIsNone(second.intent)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+{
+  "name": "future-bitget",
+  "private": true,
+  "description": "Local Demo/dry-run frontend for Future Bitget",
+  "scripts": {
+    "start": "node frontend/server.js"
+  }
+}
