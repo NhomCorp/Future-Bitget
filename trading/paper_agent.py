@@ -8,8 +8,20 @@ from ai_proposal.interface import propose
 from ai_proposal.schema import DecisionOpportunitySnapshot, ProposalDraft, ProposalRecord
 from executor.zone_executor import IntentRole, RiskTrigger, ZoneExecutor, ZoneOrderSpec
 from .mandate import TradingMandate
+from .mandate_store import recover_session
 from .order_intent import PaperOrderIntent, intent_from_proposal
+from .reconcile import blocks_new_intent
 from .risk_engine import RiskCheckRecord, evaluate_decision
+
+
+def _load_paper_intent(store: Any, client_oid: str, zone_id: str) -> dict[str, Any] | None:
+    getter = getattr(store, "get_paper_intent", None)
+    if getter is not None:
+        return getter(client_oid)
+    for item in store.paper_intents(zone_id):
+        if item.get("client_oid") == client_oid:
+            return item
+    return None
 
 
 @dataclass(frozen=True)
@@ -57,6 +69,8 @@ class PaperAgent:
 
         if zone is None:
             return self._blocked(snapshot, mandate, "ZONE_NOT_ACTIVE")
+
+        recovery = recover_session(self.store, mandate.zone_id, mandate.mandate_id)
 
         candidate: ProposalDraft | Mapping[str, Any] | None = None
         try:
@@ -122,6 +136,27 @@ class PaperAgent:
             risk_check_id=evaluation.risk_check.risk_check_id,
         )
         if intent is not None:
+            existing = _load_paper_intent(self.store, intent.client_oid, mandate.zone_id)
+            if existing is not None:
+                recovered = PaperOrderIntent.from_record(existing)
+                if blocks_new_intent(existing):
+                    self.store.append_agent_event(
+                        mandate.zone_id,
+                        "RECONCILE_REQUIRED",
+                        {"client_oid": intent.client_oid, "decision_id": intent.decision_id, "dry_run": True},
+                    )
+                return PaperAgentResult(proposal=proposal_record, risk_check=evaluation.risk_check, intent=recovered)
+            if (
+                not intent.reduce_only
+                and recovery.remaining_loss_budget is not None
+                and recovery.remaining_loss_budget <= 0
+            ):
+                self.store.append_agent_event(
+                    mandate.zone_id,
+                    "AI_DECISION_BLOCKED",
+                    {"opportunity_id": snapshot.opportunity_id, "reason_code": "LOSS_BUDGET_EXHAUSTED"},
+                )
+                return PaperAgentResult(proposal=proposal_record, risk_check=evaluation.risk_check, intent=None)
             self.store.save_paper_intent(intent.to_record())
             self.store.append_agent_event(
                 mandate.zone_id,

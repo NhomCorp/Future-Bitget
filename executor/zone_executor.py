@@ -303,6 +303,49 @@ class ZoneExecutor:
         self._zones: dict[str, _Zone] = {}
         self._intent_index: dict[str, OrderIntent] = {}
 
+    @classmethod
+    def restore(cls, store: ZoneStore, zone_id: str) -> "ZoneExecutor":
+        """Rebuild in-memory zone/intents from the SQLite bridge after restart."""
+        executor = cls(store)
+        executor.load_zone(zone_id)
+        return executor
+
+    def load_zone(self, zone_id: str) -> tuple[OrderIntent, ...]:
+        """Load persisted pending/unknown intents. Does not write new events."""
+        if zone_id in self._zones:
+            return self.intents(zone_id)
+        if self.store is None or not hasattr(self.store, "intents"):
+            raise IntentError(f"unknown zone: {zone_id}")
+        records = list(self.store.intents(zone_id))
+        snapshot = self.store.snapshot(zone_id) if hasattr(self.store, "snapshot") else None
+        if not records and snapshot:
+            records = list(snapshot.get("intents") or [])
+        if not records and snapshot is None:
+            raise IntentError(f"unknown zone: {zone_id}")
+        position = Decimal("0")
+        position_side = ""
+        state = ZoneState.PLANNED
+        triggers: set[RiskTrigger] = set()
+        if snapshot:
+            position = _decimal(snapshot.get("position_quantity", "0"), field_name="position_quantity")
+            position_side = str(snapshot.get("position_side") or "")
+            try:
+                state = ZoneState(str(snapshot.get("state", "planned")))
+            except ValueError:
+                state = ZoneState.PLANNED
+            for raw in snapshot.get("risk_triggers") or []:
+                try:
+                    triggers.add(RiskTrigger(str(raw)))
+                except ValueError:
+                    continue
+        zone = _Zone(zone_id, {}, position, position_side, state=state, triggers=triggers)
+        self._zones[zone_id] = zone
+        for record in records:
+            intent = intent_from_record(record)
+            zone.intents[intent.client_oid] = intent
+            self._intent_index[intent.client_oid] = intent
+        return self.intents(zone_id)
+
     def create_zone(
         self,
         zone_id: str,
@@ -716,6 +759,29 @@ DryRunExecutor = ZoneExecutor
 DryRunZoneExecutor = ZoneExecutor
 
 
+def intent_from_record(record: Mapping[str, Any]) -> OrderIntent:
+    """Rebuild a local intent from a persisted record. No exchange lookup."""
+    price = record.get("price")
+    return OrderIntent(
+        intent_id=str(record.get("intent_id") or record["client_oid"]),
+        client_oid=str(record["client_oid"]),
+        zone_id=str(record["zone_id"]),
+        role=IntentRole(record["role"]),
+        level=record.get("level"),
+        revision=int(record.get("revision") or 0),
+        quantity=_decimal(record["quantity"], field_name="quantity"),
+        price=None if price in (None, "") else _decimal(price, field_name="price"),
+        side=str(record.get("side", "")),
+        position_side=str(record.get("position_side", "")),
+        state=IntentState(record.get("state", IntentState.PENDING.value)),
+        filled_quantity=_decimal(record.get("filled_quantity", "0"), field_name="filled_quantity"),
+        target_client_oid=record.get("target_client_oid"),
+        dry_run=bool(record.get("dry_run", True)),
+        metadata=dict(record.get("metadata") or {}),
+        last_event=record.get("last_event"),
+    )
+
+
 def _close_side(position_side: str) -> str:
     value = position_side.lower()
     if value in {"long", "buy"}:
@@ -743,4 +809,5 @@ __all__ = [
     "ZoneOrderSpec",
     "ZoneState",
     "deterministic_client_oid",
+    "intent_from_record",
 ]

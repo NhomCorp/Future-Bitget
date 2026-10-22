@@ -1,6 +1,6 @@
 # Checklist xác minh Bitget Demo cho zone
 
-- Trạng thái: Checklist đã chốt. Harness local [`trader/demo_verify.py`](../trader/demo_verify.py) / CLI [`trader/demo_verify_cli.py`](../trader/demo_verify_cli.py) đã có. Demo GET 2026-10-22 `BTCUSDT`: D0–D4 PASS (`isolated`, `hedge_mode`, `paptrading: 1`). D5–D15 chưa chạy trên Demo.
+- Trạng thái: Checklist đã chốt. Harness local [`trader/demo_verify.py`](../trader/demo_verify.py) / CLI [`trader/demo_verify_cli.py`](../trader/demo_verify_cli.py) đã có. Demo 2026-10-22 `BTCUSDT`: D0–D6 PASS (`isolated`, `hedge_mode`, `paptrading: 1`; D5 limit `FOUND`, D6 cancel `canceled`). D7–D15 chưa chạy trên Demo.
 - Phạm vi: Bitget USDT-M Futures Classic API, tài khoản Demo, không live
 - Liên quan: [`zone-risk-policy.md`](zone-risk-policy.md), [`ai-agent-autonomous-trading.md`](ai-agent-autonomous-trading.md)
 - Tài liệu API: [Demo Trading REST API](https://www.bitget.com/docs/classic/demo-trading/rest-api), [Classic Contract Trade API](https://www.bitget.com/docs/catalog/classic-contract-trade/classic-contract-trade), [Classic Contract Account API](https://www.bitget.com/docs/catalog/classic-contract-account/classic-contract-account)
@@ -135,6 +135,6 @@ Chỉ xem xét viết dispatcher Demo sau khi:
 - Harness: `python -m trader.demo_verify_cli run --symbol BTCUSDT` (GET D0-D4). POST Demo D5-D6 cần `--place-orders --i-confirm-demo`. Không sửa `trader/bgapi.py`, không bật `GROK_TRADER_ALLOW_LIVE`, không phải dispatcher.
 - Test mock: [`tests/test_demo_verify.py`](../tests/test_demo_verify.py) cover `FOUND`, `REJECTED`, `VERIFIED_NOT_RECEIVED`, `UNKNOWN`; isolated bắt buộc; leftover position chặn entry; live env fail-closed.
 - Chưa có: Demo dispatcher, reconcile với exchange, restart recovery dựa trên trạng thái sàn.
-- Demo GET 2026-10-22 `BTCUSDT`: D0–D4 PASS. D2 từng FAIL khi `crossed`, PASS sau khi tài khoản ở `isolated`. D5–D15 chưa chạy.
+- Demo 2026-10-22 `BTCUSDT`: D0–D6 PASS. D2 từng FAIL khi `crossed`, PASS sau khi tài khoản ở `isolated`. D5 limit `FOUND`, D6 cancel `canceled` (harness `--place-orders --i-confirm-demo`). D7–D15 chưa chạy.
 - D7-D15 không tự chạy trong harness (fill/timeout thật, duplicate clientOid trên sàn, close/reduce, stop/TP, risk trigger, restart, funding/PnL, liquidation).
-- Vì vậy hiện tại: **D0–D4 đã PASS trên Demo; D5–D15 chưa**. Cổng `DemoDispatch` vẫn đóng.
+- Vì vậy hiện tại: **D0–D6 đã PASS trên Demo; D7–D15 chưa**. Cổng `DemoDispatch` vẫn đóng.

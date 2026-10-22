@@ -113,6 +113,16 @@ class P1IntegrationStore:
             );
             CREATE INDEX IF NOT EXISTS ai_agent_events_zone_idx
                 ON ai_agent_events(zone_id, event_id);
+            CREATE TABLE IF NOT EXISTS paper_budget_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                zone_id TEXT NOT NULL,
+                mandate_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                remaining TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS paper_budget_events_zone_idx
+                ON paper_budget_events(zone_id, event_id);
             """
         )
 
@@ -207,6 +217,25 @@ class P1IntegrationStore:
         ).fetchone()
         return None if row is None else json.loads(row[0])
 
+    def latest_mandate(self, mandate_id: str) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            """
+            SELECT payload_json FROM trading_mandates
+            WHERE mandate_id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (mandate_id,),
+        ).fetchone()
+        return None if row is None else json.loads(row[0])
+
+    def mandate_versions(self, mandate_id: str) -> list[int]:
+        rows = self._connection.execute(
+            "SELECT version FROM trading_mandates WHERE mandate_id = ? ORDER BY version",
+            (mandate_id,),
+        ).fetchall()
+        return [int(row[0]) for row in rows]
+
     def save_risk_check(self, check: Mapping[str, Any]) -> None:
         risk_check_id = str(check.get("risk_check_id", ""))
         decision_id = str(check.get("decision_id", ""))
@@ -270,6 +299,59 @@ class P1IntegrationStore:
             (zone_id,),
         ).fetchall()
         return [json.loads(row[0]) for row in rows]
+
+    def get_paper_intent(self, client_oid: str) -> dict[str, Any] | None:
+        row = self._connection.execute(
+            "SELECT payload_json FROM paper_intents WHERE client_oid = ?",
+            (client_oid,),
+        ).fetchone()
+        return None if row is None else json.loads(row[0])
+
+    def update_paper_intent_runtime(self, client_oid: str, updates: Mapping[str, Any]) -> dict[str, Any]:
+        existing = self.get_paper_intent(client_oid)
+        if existing is None:
+            raise P1IntegrationError(f"paper intent not found: {client_oid}")
+        allowed = {"state", "filled_quantity", "remaining_quantity", "last_event", "last_reconcile"}
+        unknown = set(updates) - allowed
+        if unknown:
+            raise P1IntegrationError(f"paper intent fields are immutable: {sorted(unknown)}")
+        payload = dict(existing)
+        for key, value in updates.items():
+            payload[key] = format(value, "f") if hasattr(value, "is_finite") else value
+        self._connection.execute(
+            "UPDATE paper_intents SET payload_json = ? WHERE client_oid = ?",
+            (_json_text(payload), client_oid),
+        )
+        return payload
+
+    def latest_budget(self, zone_id: str) -> dict[str, Any] | None:
+        self._require_zone(zone_id)
+        row = self._connection.execute(
+            """
+            SELECT payload_json FROM paper_budget_events
+            WHERE zone_id = ?
+            ORDER BY event_id DESC
+            LIMIT 1
+            """,
+            (zone_id,),
+        ).fetchone()
+        return None if row is None else json.loads(row[0])
+
+    def append_budget_event(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        zone_id = str(event.get("zone_id", ""))
+        mandate_id = str(event.get("mandate_id", ""))
+        remaining = event.get("remaining")
+        if not zone_id or not mandate_id or remaining is None:
+            raise P1IntegrationError("budget event requires zone_id, mandate_id, and remaining")
+        self._require_zone(zone_id)
+        payload = _json_safe(event)
+        remaining_text = format(remaining, "f") if hasattr(remaining, "is_finite") else str(remaining)
+        payload["remaining"] = remaining_text
+        self._connection.execute(
+            "INSERT INTO paper_budget_events(zone_id, mandate_id, remaining, payload_json) VALUES (?, ?, ?, ?)",
+            (zone_id, mandate_id, remaining_text, _json_text(payload)),
+        )
+        return payload
 
     def intents(self, zone_id: str) -> list[dict[str, Any]]:
         self._require_zone(zone_id)

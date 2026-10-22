@@ -10,7 +10,7 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Zone desk, trang chủ">
+      <a class="brand" href="#/tong-quan" aria-label="Zone desk, tổng quan">
         <span class="brand-mark" aria-hidden="true">Z</span>
         <span>zone desk</span>
       </a>
@@ -18,165 +18,473 @@
       <button class="button button-quiet" id="reset-button" type="button">Xóa dữ liệu demo</button>
     </header>
 
-    <main class="shell">
-      <section class="intro" aria-labelledby="page-title">
-        <div>
-          <p class="intro-kicker">Future Bitget · Local workspace</p>
-          <h1 id="page-title">Vùng thử nghiệm</h1>
-          <p class="intro-copy">Tạo zone, ghi nhận quan sát và kiểm tra trạng thái. Mọi dữ liệu chỉ nằm trên trình duyệt này.</p>
-        </div>
-        <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có lệnh giao dịch</strong></span></div>
-      </section>
+    <div class="app-frame">
+      <nav class="sidenav" aria-label="Điều hướng">
+        <p class="nav-group-label">Cấu hình</p>
+        <a class="nav-link" href="#/ket-noi" data-view="ket-noi">Kết nối</a>
+        <a class="nav-link" href="#/cau-hinh-ai" data-view="cau-hinh-ai">Cấu hình AI</a>
+        <a class="nav-link" href="#/mandate" data-view="mandate">Mandate</a>
+        <a class="nav-link" href="#/quyen-ai" data-view="quyen-ai">Quyền AI</a>
+        <a class="nav-link" href="#/phong-cach" data-view="phong-cach">Phong cách</a>
+        <p class="nav-group-label">Vận hành</p>
+        <a class="nav-link" href="#/tong-quan" data-view="tong-quan">Tổng quan</a>
+        <a class="nav-link" href="#/ban-zone" data-view="ban-zone">Bàn zone</a>
+        <a class="nav-link" href="#/nhat-ky" data-view="nhat-ky">Nhật ký</a>
+      </nav>
 
-      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <main class="shell">
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
-      <section class="panel policy-panel" aria-labelledby="policy-heading">
-        <div class="panel-heading">
-          <div><p class="eyebrow">Áp dụng toàn subaccount</p><h2 id="policy-heading">Cài đặt giới hạn rủi ro</h2></div>
-          <span class="step-tag" id="policy-version">Chưa lưu policy</span>
-        </div>
-        <form id="policy-form" class="policy-form" novalidate>
-          <div class="policy-form-grid">
-            <label class="field">
-              <span>Vốn được cấp</span>
-              <div class="input-suffix"><input name="granted_capital" inputmode="decimal" required /><span>USDT</span></div>
-              <small>Trần vốn AI được quản lý, không phải mức lỗ</small>
-            </label>
-            <label class="field">
-              <span>Quyền AI</span>
-              <select name="ai_autonomy" required>
-                <option value="PROPOSAL_ONLY">Chỉ ghi proposal</option>
-                <option value="MANAGED_ZONE" selected>Quản lý zone đã mở</option>
-                <option value="AUTONOMOUS_WITHIN_MANDATE">Tự chủ trong mandate</option>
-              </select>
-              <small>Mode tự chủ chỉ lưu cấu hình, frontend local không tự giao dịch</small>
-            </label>
-            <label class="field">
-              <span>Daily loss limit</span>
-              <div class="input-suffix"><input name="daily_loss_limit_pct" inputmode="decimal" value="20" required /><span>%</span></div>
-              <small>% equity đầu ngày · reset 00:00 UTC</small>
-            </label>
-            <label class="field">
-              <span>Khi chạm daily loss</span>
-              <select name="daily_loss_action" required>
-                <option value="FREEZE_ENTRY" selected>Khóa entry mới</option>
-                <option value="EMERGENCY_FLATTEN">Đóng khẩn cấp dry-run</option>
-              </select>
-              <small>Local paper/dry-run; không gửi lệnh sàn</small>
-            </label>
-            <label class="field">
-              <span>Chuỗi lỗ tối đa</span>
-              <input name="max_consecutive_losses" inputmode="numeric" value="3" required />
-              <small>Sau ngưỡng này khóa entry, không reset bằng đổi symbol</small>
-            </label>
-            <label class="field">
-              <span>Cooldown sau chuỗi lỗ</span>
-              <input name="loss_streak_cooldown" placeholder="24h" required />
-              <small>Thời gian khóa entry; chỉ lưu, chưa tự mở lại</small>
-            </label>
-            <label class="field">
-              <span>Drawdown limit</span>
-              <div class="input-unit"><input name="drawdown_limit" inputmode="decimal" required /><select name="drawdown_unit" aria-label="Đơn vị drawdown"><option value="pct">%</option><option value="usdt">USDT</option></select></div>
-              <small>Áp dụng cho toàn subaccount</small>
-            </label>
-            <label class="field">
-              <span>Mốc tính drawdown</span>
-              <select name="drawdown_reference" required>
-                <option value="">Chọn mốc tham chiếu</option>
-                <option value="equity_peak">Equity đỉnh</option>
-                <option value="day_start">Equity đầu ngày</option>
-                <option value="policy_start">Equity lúc lưu policy</option>
-              </select>
-              <small>Chỉ lưu lựa chọn, chưa tính từ equity thật</small>
-            </label>
-            <label class="field">
-              <span>Leverage tối đa</span>
-              <div class="input-suffix"><input name="max_leverage" inputmode="decimal" required /><span>×</span></div>
-              <small>Bot không được vượt mức này</small>
-            </label>
-            <label class="field policy-symbols">
-              <span>Symbol được phép</span>
-              <input name="symbol_allowlist" autocomplete="off" placeholder="BTCUSDT, ETHUSDT" required />
-              <small>Phân tách bằng dấu phẩy. Chỉ symbol bạn nhập mới được chọn cho zone.</small>
-            </label>
-          </div>
-          <div class="policy-footer">
-            <p class="policy-note">Isolated margin cố định. Entry, DCA và TP dùng limit; lệnh thoát khẩn cấp dùng market reduce-only. Daily loss, drawdown và chuỗi lỗ chỉ được lưu, chưa tính từ equity thật. AUTONOMOUS không tự chạy trên frontend local. Policy lưu cục bộ; thay đổi tạo version mới.</p>
-            <button class="button button-primary" type="submit">Lưu policy version</button>
-          </div>
-          <p class="form-error" id="policy-error" role="alert" hidden></p>
-          <div class="policy-history" id="policy-history" aria-label="Lịch sử policy đã lưu"></div>
-        </form>
-      </section>
-
-      <section class="workspace" aria-label="Bàn điều khiển zone">
-        <aside class="zone-rail" aria-labelledby="zones-heading">
-          <div class="section-heading">
-            <div><p class="eyebrow">Sổ theo dõi</p><h2 id="zones-heading">Zone <span id="zone-count" class="count">0</span></h2></div>
-          </div>
-          <div id="zone-list" class="zone-list"></div>
-          <div id="empty-state" class="empty-state">
-            <div class="empty-symbol" aria-hidden="true">＋</div>
-            <h3>Chưa có zone nào</h3>
-            <p>Tạo một zone preview để bắt đầu kiểm tra luồng local.</p>
-          </div>
-        </aside>
-
-        <div class="work-area">
-          <section class="panel create-panel" aria-labelledby="create-heading">
-            <div class="panel-heading">
-              <div><p class="eyebrow">Cấu hình mới</p><h2 id="create-heading">Tạo zone preview</h2></div>
-              <span class="step-tag">Bắt đầu ở PREVIEW</span>
+        <section class="view-panel" data-view-panel="ket-noi" hidden>
+          <section class="intro" aria-labelledby="connect-title">
+            <div>
+              <p class="intro-kicker">Cấu hình</p>
+              <h1 id="connect-title">Kết nối</h1>
+              <p class="intro-copy">Chỉ hiện trạng thái môi trường. Không nhập API key trên giao diện.</p>
             </div>
-            <form id="create-form" novalidate>
-              <div class="form-grid form-grid-top">
-                <label class="field"><span>Symbol được phép</span><select name="symbol" id="zone-symbol" required><option value="">Lưu policy trước</option></select><small>Chọn trong allowlist của policy hiện tại</small></label>
-                <label class="field"><span>Hướng</span><select name="side"><option value="long">Long</option><option value="short">Short</option></select><small>Chọn hướng mô phỏng</small></label>
-                <label class="field"><span>Giá tham chiếu</span><input name="ref_price" inputmode="decimal" placeholder="65000" required /><small>Phải lớn hơn 0</small></label>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có form secret</strong></span></div>
+          </section>
+          <section class="panel" aria-labelledby="connect-status-heading">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Local, không gọi Bitget</p>
+                <h2 id="connect-status-heading">Trạng thái môi trường</h2>
               </div>
-              <div class="form-grid form-grid-risk">
-                <label class="field"><span>Giới hạn lỗ zone</span><input name="zone_loss_limit_usdt" inputmode="decimal" placeholder="25.00" required /><small>USDT · hard loss control</small></label>
-                <label class="field"><span>Rủi ro tối đa mỗi lệnh</span><input name="max_order_risk_usdt" inputmode="decimal" placeholder="5.00" required /><small>USDT · lớn hơn 0</small></label>
-                <label class="field"><span>Stop-loss chiến lược <i>tùy chọn</i></span><div class="input-suffix"><input name="sl_pct" inputmode="decimal" placeholder="2.5" /><span>%</span></div><small>Có thể bỏ; hard loss control vẫn bắt buộc</small></label>
-                <div class="form-action"><button class="button button-primary" type="submit">Tạo preview</button></div>
+              <button class="button button-secondary" id="connect-refresh" type="button">Đọc lại env</button>
+            </div>
+            <div class="connect-body">
+              <p id="connect-banner" class="connect-banner" hidden></p>
+              <dl class="connect-status" id="connect-status"></dl>
+              <p class="risk-disclaimer">Điền key Demo vào <code>.env</code> (bản mẫu <code>.env.example</code>). Trang này không nhận secret và không nối GET Bitget.</p>
+            </div>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="cau-hinh-ai" hidden>
+          <section class="intro" aria-labelledby="agent-config-title">
+            <div>
+              <p class="intro-kicker">Cấu hình</p>
+              <h1 id="agent-config-title">Cấu hình AI</h1>
+              <p class="intro-copy">Chọn provider, model và API key trước khi cấp vốn. Gemini: mọi key ngang hàng, bốc ngẫu nhiên. Check live ping model, không đặt lệnh.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Check live gọi provider<br /><strong>Key hiện rõ, lưu máy này</strong></span></div>
+          </section>
+          <section class="panel policy-panel" aria-labelledby="agent-config-heading">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Object riêng, không đụng mandate</p><h2 id="agent-config-heading">Provider và model</h2></div>
+              <span class="step-tag" id="agent-config-version">Chưa cấu hình</span>
+            </div>
+            <form id="agent-config-form" class="policy-form" novalidate>
+              <div class="policy-form-grid agent-form-grid">
+                <label class="field">
+                  <span>Provider</span>
+                  <select name="provider" id="agent-provider" required>
+                    <option value="gemini">Gemini</option>
+                    <option value="openai_compatible">OpenAI-compatible</option>
+                  </select>
+                  <small>Đổi provider tạo version mới; UI Demo chỉ lưu</small>
+                </label>
+                <label class="field">
+                  <span>Model</span>
+                  <input name="model" id="agent-model" autocomplete="off" placeholder="tên model" required />
+                  <small>Tên model do bạn nhập. Check live ping thử.</small>
+                </label>
+                <label class="field" id="agent-base-url-field" hidden>
+                  <span>Base URL</span>
+                  <input name="base_url" id="agent-base-url" autocomplete="off" placeholder="https://" />
+                  <small>Bắt buộc với OpenAI-compatible</small>
+                </label>
+                <label class="field">
+                  <span>Request timeout</span>
+                  <div class="input-suffix"><input name="request_timeout" id="agent-timeout" inputmode="decimal" placeholder="30" required /><span>s</span></div>
+                  <small>Giới hạn thời gian gọi, giây</small>
+                </label>
               </div>
-              <p class="form-error" id="create-error" role="alert" hidden></p>
+              <div class="key-block" id="gemini-keys-block">
+                <div class="key-block-head">
+                  <div>
+                    <p class="eyebrow">Gemini</p>
+                    <h3>API key theo nhãn</h3>
+                    <p class="key-block-note">Mọi key ngang hàng. Khi gọi hoặc Check live, bốc ngẫu nhiên một key.</p>
+                  </div>
+                  <button class="button button-secondary" id="add-gemini-key" type="button">Thêm key</button>
+                </div>
+                <div class="key-rows" id="gemini-key-rows"></div>
+              </div>
+              <div class="key-block" id="openai-key-block" hidden>
+                <label class="field">
+                  <span>API key</span>
+                  <input name="api_key" id="openai-api-key" type="text" spellcheck="false" autocomplete="off" />
+                  <small>Một key cho OpenAI-compatible</small>
+                </label>
+              </div>
+              <div class="policy-footer">
+                <p class="policy-note">Lưu tạo agent-config version mới. Không đụng version mandate. Check live ping provider, không tạo version, không tự bật AUTONOMOUS. Thông báo không in giá trị key.</p>
+                <div class="policy-actions">
+                  <button class="button button-secondary" id="agent-check-live" type="button">Check live</button>
+                  <button class="button button-primary" type="submit">Lưu cấu hình AI</button>
+                </div>
+              </div>
+              <p class="agent-check-status" id="agent-check-status" hidden></p>
+              <p class="form-error" id="agent-config-error" role="alert" hidden></p>
+              <div class="policy-history" id="agent-config-history" aria-label="Lịch sử cấu hình AI đã lưu"></div>
             </form>
           </section>
+        </section>
 
-          <section class="panel detail-panel" aria-labelledby="detail-heading">
-            <div class="panel-heading detail-heading">
-              <div><p class="eyebrow">Zone đã chọn</p><h2 id="detail-heading">Chi tiết &amp; quan sát</h2></div>
-              <div class="selected-id" id="selected-id">Chưa chọn zone</div>
+        <section class="view-panel" data-view-panel="tong-quan" hidden>
+          <section class="intro" aria-labelledby="overview-title">
+            <div>
+              <p class="intro-kicker">Vận hành</p>
+              <h1 id="overview-title">Tổng quan</h1>
+              <p class="intro-copy">Bàn tài khoản local, không chart. Last/mark/funding nhập tay; vị thế, lệnh chờ và tài sản để trống nếu chưa có số local.</p>
             </div>
-            <div id="detail-empty" class="detail-empty">Chọn một zone trong sổ theo dõi để xem trạng thái và ghi nhận observation.</div>
-            <div id="detail-content" hidden>
-              <div class="detail-summary" id="detail-summary"></div>
-              <div class="observation-layout">
-                <form id="sync-form" class="sync-form" novalidate>
-                  <div class="subheading"><h3>Ghi observation</h3><span>mock / local</span></div>
-                  <div class="form-grid observation-grid">
-                    <label class="field"><span>Mark price</span><input name="mark_price" inputmode="decimal" placeholder="65000" /></label>
-                    <label class="field"><span>Realized PnL</span><input name="realized_pnl" inputmode="decimal" value="0" /></label>
-                    <label class="field"><span>Unrealized PnL</span><input name="unrealized_pnl" inputmode="decimal" value="0" /></label>
-                    <label class="field"><span>Fees</span><input name="fees" inputmode="decimal" value="0" /></label>
-                    <label class="field"><span>Funding đã trả</span><input name="funding_paid" inputmode="decimal" value="0" /></label>
-                    <label class="field"><span>Funding đã nhận</span><input name="funding_received" inputmode="decimal" value="0" /></label>
-                  </div>
-                  <p class="form-error" id="sync-error" role="alert" hidden></p>
-                  <div class="sync-actions"><button class="button button-secondary" id="activate-button" type="button">Kích hoạt local</button><button class="button button-primary" type="submit">Ghi observation</button></div>
-                </form>
-                <section class="latest-observation" aria-labelledby="latest-heading">
-                  <div class="subheading"><h3 id="latest-heading">Observation gần nhất</h3></div>
-                  <div id="observation-result" class="observation-result"></div>
-                </section>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không bịa số sàn</strong></span></div>
+          </section>
+          <div class="overview-desk">
+            <section class="ticker-bar" aria-label="Ticker local">
+              <label class="ticker-cell">
+                <span>Symbol</span>
+                <select id="overview-symbol" aria-label="Symbol local">
+                  <option value="">—</option>
+                </select>
+              </label>
+              <label class="ticker-cell">
+                <span>Last</span>
+                <input id="overview-last" inputmode="decimal" placeholder="—" autocomplete="off" aria-label="Last local" />
+              </label>
+              <label class="ticker-cell">
+                <span>Mark</span>
+                <input id="overview-mark" inputmode="decimal" placeholder="—" autocomplete="off" aria-label="Mark local" />
+              </label>
+              <label class="ticker-cell">
+                <span>Funding</span>
+                <input id="overview-funding" inputmode="decimal" placeholder="—" autocomplete="off" aria-label="Funding local" />
+              </label>
+              <div class="ticker-cell ticker-equity">
+                <span>Equity</span>
+                <strong id="overview-equity">—</strong>
+                <small id="overview-equity-note">Chưa có equity local</small>
               </div>
-              <p class="risk-disclaimer">Kết quả risk là mô phỏng local, không bảo đảm mức lỗ tối đa.</p>
+            </section>
+            <p class="overview-hint">Số last/mark/funding chỉ nhập tay trên máy này. Equity không lấy từ sàn. Không chart, không gọi Bitget.</p>
+            <div class="overview-body">
+              <section class="panel intent-ticket" aria-labelledby="intent-heading">
+                <div class="panel-heading">
+                  <div><p class="eyebrow">Soạn local</p><h2 id="intent-heading">Phiếu intent</h2></div>
+                  <span class="step-tag">Không gửi lệnh</span>
+                </div>
+                <form id="intent-form" class="intent-form" novalidate>
+                  <p class="intent-symbol-line">Symbol phiếu: <strong id="intent-symbol">—</strong></p>
+                  <fieldset class="intent-side">
+                    <legend>Hướng</legend>
+                    <label><input type="radio" name="intent_side" value="long" checked /> Long</label>
+                    <label><input type="radio" name="intent_side" value="short" /> Short</label>
+                  </fieldset>
+                  <label class="field">
+                    <span>Loại lệnh</span>
+                    <input id="intent-order-type" value="limit" readonly />
+                    <small>Cố định limit theo policy entry</small>
+                  </label>
+                  <label class="field">
+                    <span>Giá</span>
+                    <input name="intent_price" id="intent-price" inputmode="decimal" placeholder="—" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>Khối lượng</span>
+                    <input name="intent_size" id="intent-size" inputmode="decimal" placeholder="—" autocomplete="off" />
+                  </label>
+                  <div class="intent-readonly">
+                    <div><span>Leverage</span><strong id="intent-leverage">—</strong></div>
+                    <div><span>Margin</span><strong id="intent-margin">—</strong></div>
+                  </div>
+                  <p class="intent-note">Nháp lưu local khi bạn gõ. Không có nút đặt lệnh, không POST, không ghi nhãn Mua/Bán.</p>
+                  <p class="form-error" id="intent-error" role="alert" hidden></p>
+                </form>
+              </section>
+              <section class="panel overview-book" aria-labelledby="book-heading">
+                <div class="panel-heading book-heading">
+                  <div><p class="eyebrow">Sổ local</p><h2 id="book-heading">Trạng thái tài khoản</h2></div>
+                </div>
+                <div class="book-tabs" role="tablist" aria-label="Sổ tài khoản local">
+                  <button type="button" class="book-tab is-active" role="tab" id="tab-positions" data-book-tab="positions" aria-selected="true" aria-controls="book-positions">Vị thế</button>
+                  <button type="button" class="book-tab" role="tab" id="tab-orders" data-book-tab="orders" aria-selected="false" aria-controls="book-orders">Lệnh chờ</button>
+                  <button type="button" class="book-tab" role="tab" id="tab-assets" data-book-tab="assets" aria-selected="false" aria-controls="book-assets">Tài sản</button>
+                </div>
+                <div class="book-panel" role="tabpanel" id="book-positions" data-book-panel="positions" aria-labelledby="tab-positions">
+                  <div class="empty-state">
+                    <div class="empty-symbol" aria-hidden="true">○</div>
+                    <h3>Chưa có vị thế local</h3>
+                    <p>Không lấy vị thế từ sàn. Không bịa số.</p>
+                  </div>
+                </div>
+                <div class="book-panel" role="tabpanel" id="book-orders" data-book-panel="orders" aria-labelledby="tab-orders" hidden>
+                  <div class="empty-state">
+                    <div class="empty-symbol" aria-hidden="true">○</div>
+                    <h3>Chưa có lệnh chờ local</h3>
+                    <p>Không lấy lệnh từ sàn. Không bịa số.</p>
+                  </div>
+                </div>
+                <div class="book-panel" role="tabpanel" id="book-assets" data-book-panel="assets" aria-labelledby="tab-assets" hidden>
+                  <div class="empty-state">
+                    <div class="empty-symbol" aria-hidden="true">○</div>
+                    <h3>Chưa có tài sản local</h3>
+                    <p>Không lấy số dư từ sàn. Không bịa số.</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="mandate" hidden>
+          <section class="intro" aria-labelledby="mandate-title">
+            <div>
+              <p class="intro-kicker">Cấu hình</p>
+              <h1 id="mandate-title">Mandate</h1>
+              <p class="intro-copy">Khẩu vị rủi ro của subaccount. Quyền AI chọn ở trang riêng; vẫn cùng một policy object.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có lệnh giao dịch</strong></span></div>
+          </section>
+          <section class="panel policy-panel" aria-labelledby="policy-heading">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Áp dụng toàn subaccount</p><h2 id="policy-heading">Cài đặt giới hạn rủi ro</h2></div>
+              <span class="step-tag" id="policy-version">Chưa lưu policy</span>
+            </div>
+            <form id="policy-form" class="policy-form" novalidate>
+              <p class="autonomy-readout" id="mandate-autonomy-readout">Quyền AI: chưa chọn · lưu Mandate trước, rồi mở trang Quyền AI.</p>
+              <div class="policy-form-grid">
+                <label class="field">
+                  <span>Vốn được cấp</span>
+                  <div class="input-suffix"><input name="granted_capital" inputmode="decimal" required /><span>USDT</span></div>
+                  <small>Trần vốn AI được quản lý, không phải mức lỗ</small>
+                </label>
+                <label class="field">
+                  <span>Daily loss limit</span>
+                  <div class="input-suffix"><input name="daily_loss_limit_pct" inputmode="decimal" value="20" required /><span>%</span></div>
+                  <small>% equity đầu ngày · reset 00:00 UTC</small>
+                </label>
+                <label class="field">
+                  <span>Khi chạm daily loss</span>
+                  <select name="daily_loss_action" required>
+                    <option value="FREEZE_ENTRY" selected>Khóa entry mới</option>
+                    <option value="EMERGENCY_FLATTEN">Đóng khẩn cấp dry-run</option>
+                  </select>
+                  <small>Local paper/dry-run; không gửi lệnh sàn</small>
+                </label>
+                <label class="field">
+                  <span>Chuỗi lỗ tối đa</span>
+                  <input name="max_consecutive_losses" inputmode="numeric" value="3" required />
+                  <small>Sau ngưỡng này khóa entry, không reset bằng đổi symbol</small>
+                </label>
+                <label class="field">
+                  <span>Cooldown sau chuỗi lỗ</span>
+                  <input name="loss_streak_cooldown" placeholder="24h" required />
+                  <small>Thời gian khóa entry; chỉ lưu, chưa tự mở lại</small>
+                </label>
+                <label class="field">
+                  <span>Drawdown limit</span>
+                  <div class="input-unit"><input name="drawdown_limit" inputmode="decimal" required /><select name="drawdown_unit" aria-label="Đơn vị drawdown"><option value="pct">%</option><option value="usdt">USDT</option></select></div>
+                  <small>Áp dụng cho toàn subaccount</small>
+                </label>
+                <label class="field">
+                  <span>Mốc tính drawdown</span>
+                  <select name="drawdown_reference" required>
+                    <option value="">Chọn mốc tham chiếu</option>
+                    <option value="equity_peak">Equity đỉnh</option>
+                    <option value="day_start">Equity đầu ngày</option>
+                    <option value="policy_start">Equity lúc lưu policy</option>
+                  </select>
+                  <small>Chỉ lưu lựa chọn, chưa tính từ equity thật</small>
+                </label>
+                <label class="field">
+                  <span>Leverage tối đa</span>
+                  <div class="input-suffix"><input name="max_leverage" inputmode="decimal" required /><span>×</span></div>
+                  <small>Bot không được vượt mức này</small>
+                </label>
+                <label class="field policy-symbols">
+                  <span>Symbol được phép</span>
+                  <input name="symbol_allowlist" autocomplete="off" placeholder="BTCUSDT, ETHUSDT" required />
+                  <small>Phân tách bằng dấu phẩy. Chỉ symbol bạn nhập mới được chọn cho zone.</small>
+                </label>
+              </div>
+              <div class="policy-footer">
+                <p class="policy-note">Isolated margin cố định. Entry, DCA và TP dùng limit; lệnh thoát khẩn cấp dùng market reduce-only. Daily loss, drawdown và chuỗi lỗ chỉ được lưu, chưa tính từ equity thật. Policy lưu cục bộ; thay đổi tạo version mới. Quyền AI không sửa ở form này.</p>
+                <button class="button button-primary" type="submit">Lưu policy version</button>
+              </div>
+              <p class="form-error" id="policy-error" role="alert" hidden></p>
+              <div class="policy-history" id="policy-history" aria-label="Lịch sử policy đã lưu"></div>
+            </form>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="quyen-ai" hidden>
+          <section class="intro" aria-labelledby="autonomy-title">
+            <div>
+              <p class="intro-kicker">Cấu hình</p>
+              <h1 id="autonomy-title">Quyền AI</h1>
+              <p class="intro-copy">Chọn mode sau khi đã lưu Mandate. Đổi mode tạo policy version mới; frontend không tự giao dịch.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>AUTONOMOUS chỉ lưu cấu hình</strong></span></div>
+          </section>
+          <section class="panel policy-panel" aria-labelledby="autonomy-heading">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Cùng policy object với Mandate</p><h2 id="autonomy-heading">Mode vận hành</h2></div>
+              <span class="step-tag" id="autonomy-version">Chưa lưu policy</span>
+            </div>
+            <form id="autonomy-form" class="policy-form" novalidate>
+              <p class="agent-readout" id="autonomy-agent-readout">Agent: chưa cấu hình</p>
+              <p class="autonomy-gate" id="autonomy-gate">Lưu Mandate trước khi chọn quyền AI.</p>
+              <fieldset class="autonomy-fieldset" id="autonomy-fieldset" disabled>
+                <legend class="visually-hidden">Chọn quyền AI</legend>
+                <label class="autonomy-card">
+                  <input type="radio" name="ai_autonomy" value="PROPOSAL_ONLY" />
+                  <span>
+                    <strong>Chỉ ghi proposal</strong>
+                    <em>PROPOSAL_ONLY</em>
+                    <small>AI chỉ đề xuất. Không tạo zone, không gửi lệnh trên frontend local.</small>
+                  </span>
+                </label>
+                <label class="autonomy-card">
+                  <input type="radio" name="ai_autonomy" value="MANAGED_ZONE" checked />
+                  <span>
+                    <strong>Quản lý zone đã mở</strong>
+                    <em>MANAGED_ZONE</em>
+                    <small>Bạn tạo zone trong allowlist. AI không tự mở zone mới trên frontend local.</small>
+                  </span>
+                </label>
+                <label class="autonomy-card">
+                  <input type="radio" name="ai_autonomy" value="AUTONOMOUS_WITHIN_MANDATE" />
+                  <span>
+                    <strong>Tự chủ trong mandate</strong>
+                    <em>AUTONOMOUS_WITHIN_MANDATE</em>
+                    <small>Chỉ lưu cấu hình. Frontend local không tự giao dịch, kể cả khi chọn mode này.</small>
+                  </span>
+                </label>
+              </fieldset>
+              <div class="policy-footer">
+                <p class="policy-note">Lưu quyền AI copy toàn bộ field khẩu vị đang có và tăng version. Zone đã tạo giữ snapshot cũ; chỉ zone mới nhận version mới.</p>
+                <button class="button button-primary" id="autonomy-submit" type="submit" disabled>Lưu quyền AI</button>
+              </div>
+              <p class="form-error" id="autonomy-error" role="alert" hidden></p>
+            </form>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="ban-zone" hidden>
+          <section class="intro" aria-labelledby="page-title">
+            <div>
+              <p class="intro-kicker">Vận hành</p>
+              <h1 id="page-title">Bàn zone</h1>
+              <p class="intro-copy">Tạo zone, ghi nhận quan sát và kiểm tra trạng thái. Thiếu policy thì không tạo zone.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có lệnh giao dịch</strong></span></div>
+          </section>
+          <p class="agent-readout" id="zone-agent-readout">Agent: chưa cấu hình</p>
+          <p class="zone-gate" id="zone-gate" hidden>Lưu Mandate trước khi tạo zone.</p>
+          <section class="workspace" aria-label="Bàn điều khiển zone">
+            <aside class="zone-rail" aria-labelledby="zones-heading">
+              <div class="section-heading">
+                <div><p class="eyebrow">Sổ theo dõi</p><h2 id="zones-heading">Zone <span id="zone-count" class="count">0</span></h2></div>
+              </div>
+              <div id="zone-list" class="zone-list"></div>
+              <div id="empty-state" class="empty-state">
+                <div class="empty-symbol" aria-hidden="true">＋</div>
+                <h3>Chưa có zone nào</h3>
+                <p>Tạo một zone preview để bắt đầu kiểm tra luồng local.</p>
+              </div>
+            </aside>
+
+            <div class="work-area">
+              <section class="panel create-panel" aria-labelledby="create-heading">
+                <div class="panel-heading">
+                  <div><p class="eyebrow">Cấu hình mới</p><h2 id="create-heading">Tạo zone preview</h2></div>
+                  <span class="step-tag">Bắt đầu ở PREVIEW</span>
+                </div>
+                <form id="create-form" novalidate>
+                  <div class="form-grid form-grid-top">
+                    <label class="field"><span>Symbol được phép</span><select name="symbol" id="zone-symbol" required><option value="">Lưu policy trước</option></select><small>Chọn trong allowlist của policy hiện tại</small></label>
+                    <label class="field"><span>Hướng</span><select name="side"><option value="long">Long</option><option value="short">Short</option></select><small>Chọn hướng mô phỏng</small></label>
+                    <label class="field"><span>Giá tham chiếu</span><input name="ref_price" inputmode="decimal" placeholder="65000" required /><small>Phải lớn hơn 0</small></label>
+                  </div>
+                  <div class="form-grid form-grid-risk">
+                    <label class="field"><span>Giới hạn lỗ zone</span><input name="zone_loss_limit_usdt" inputmode="decimal" placeholder="25.00" required /><small>USDT · hard loss control</small></label>
+                    <label class="field"><span>Rủi ro tối đa mỗi lệnh</span><input name="max_order_risk_usdt" inputmode="decimal" placeholder="5.00" required /><small>USDT · lớn hơn 0</small></label>
+                    <label class="field"><span>Stop-loss chiến lược <i>tùy chọn</i></span><div class="input-suffix"><input name="sl_pct" inputmode="decimal" placeholder="2.5" /><span>%</span></div><small>Có thể bỏ; hard loss control vẫn bắt buộc</small></label>
+                    <div class="form-action"><button class="button button-primary" id="create-submit" type="submit">Tạo preview</button></div>
+                  </div>
+                  <p class="form-error" id="create-error" role="alert" hidden></p>
+                </form>
+              </section>
+
+              <section class="panel detail-panel" aria-labelledby="detail-heading">
+                <div class="panel-heading detail-heading">
+                  <div><p class="eyebrow">Zone đã chọn</p><h2 id="detail-heading">Chi tiết &amp; quan sát</h2></div>
+                  <div class="selected-id" id="selected-id">Chưa chọn zone</div>
+                </div>
+                <div id="detail-empty" class="detail-empty">Chọn một zone trong sổ theo dõi để xem trạng thái và ghi nhận observation.</div>
+                <div id="detail-content" hidden>
+                  <div class="detail-summary" id="detail-summary"></div>
+                  <div class="observation-layout">
+                    <form id="sync-form" class="sync-form" novalidate>
+                      <div class="subheading"><h3>Ghi observation</h3><span>mock / local</span></div>
+                      <div class="form-grid observation-grid">
+                        <label class="field"><span>Mark price</span><input name="mark_price" inputmode="decimal" placeholder="65000" /></label>
+                        <label class="field"><span>Realized PnL</span><input name="realized_pnl" inputmode="decimal" value="0" /></label>
+                        <label class="field"><span>Unrealized PnL</span><input name="unrealized_pnl" inputmode="decimal" value="0" /></label>
+                        <label class="field"><span>Fees</span><input name="fees" inputmode="decimal" value="0" /></label>
+                        <label class="field"><span>Funding đã trả</span><input name="funding_paid" inputmode="decimal" value="0" /></label>
+                        <label class="field"><span>Funding đã nhận</span><input name="funding_received" inputmode="decimal" value="0" /></label>
+                      </div>
+                      <p class="form-error" id="sync-error" role="alert" hidden></p>
+                      <div class="sync-actions"><button class="button button-secondary" id="activate-button" type="button">Kích hoạt local</button><button class="button button-primary" type="submit">Ghi observation</button></div>
+                    </form>
+                    <section class="latest-observation" aria-labelledby="latest-heading">
+                      <div class="subheading"><h3 id="latest-heading">Observation gần nhất</h3></div>
+                      <div id="observation-result" class="observation-result"></div>
+                    </section>
+                  </div>
+                  <p class="risk-disclaimer">Kết quả risk là mô phỏng local, không bảo đảm mức lỗ tối đa.</p>
+                </div>
+              </section>
             </div>
           </section>
-        </div>
-      </section>
-      <footer><span>Zone foundation · chạy trên thiết bị của bạn</span><span id="local-state">Lưu trong trình duyệt</span></footer>
-    </main>
+        </section>
+
+        <section class="view-panel" data-view-panel="phong-cach" hidden>
+          <section class="intro" aria-labelledby="style-title">
+            <div>
+              <p class="intro-kicker">Cấu hình</p>
+              <h1 id="style-title">Phong cách</h1>
+              <p class="intro-copy">Ghi chú và điều kiện không giao dịch. Không phải hard limit.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không ghi đè risk</strong></span></div>
+          </section>
+          <div class="panel stub-panel">
+            <p class="eyebrow">Làm sau</p>
+            <h2>Chưa làm</h2>
+            <p>Form YAML theo spec phong cách người dùng. Chừa chỗ nav; làm sau khi Demo ổn.</p>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="nhat-ky" hidden>
+          <section class="intro" aria-labelledby="journal-title">
+            <div>
+              <p class="intro-kicker">Vận hành</p>
+              <h1 id="journal-title">Nhật ký</h1>
+              <p class="intro-copy">Sổ proposal và risk local. Chưa có dữ liệu trên frontend.</p>
+            </div>
+            <div class="connection-note"><span class="lock-icon" aria-hidden="true">▣</span><span>Không kết nối sàn<br /><strong>Không có lệnh giao dịch</strong></span></div>
+          </section>
+          <div class="panel stub-panel">
+            <p class="eyebrow">Làm sau</p>
+            <h2>Chưa làm</h2>
+            <p>Nhật ký proposal/risk sẽ hiện ở đây. Nav đã chừa chỗ.</p>
+          </div>
+        </section>
+
+        <footer><span>Zone foundation · chạy trên thiết bị của bạn</span><span id="local-state">Lưu trong trình duyệt</span></footer>
+      </main>
+    </div>
   </body>
 </html>

@@ -16,9 +16,9 @@ Cổng cố định `3007`. Không cần `npm install`. Chạy từ thư mục r
 npm start
 ```
 
-Sau đó mở `http://localhost:3007`. Giao diện hỗ trợ tạo zone preview, kích hoạt local và ghi observation mock. Dữ liệu chỉ được lưu trong local storage của trình duyệt.
+Sau đó mở `http://localhost:3007`. Nav trong-trang: Kết nối, Cấu hình AI, Mandate, Quyền AI, Phong cách, Tổng quan, Bàn zone, Nhật ký. Cấu hình AI lưu provider/model local; Gemini nhiều key ngang hàng (bốc ngẫu nhiên), OpenAI-compatible một key; nút Check live ping provider. Tổng quan là mock (ticker nhập tay, phiếu intent, tab rỗng). Kết nối hiện status Demo/env đủ-thiếu, không form secret; Phong cách và Nhật ký đang stub. Tạo zone preview, kích hoạt local và ghi observation mock. Dữ liệu chỉ lưu trong local storage; đổi trang không mất dữ liệu.
 
-Cách khác (Python):
+Cách khác (Python) chỉ phục vụ file tĩnh, không có `/api/connect-status` hay Check live:
 
 ```bash
 python -m http.server 3007 --bind 127.0.0.1 --directory frontend

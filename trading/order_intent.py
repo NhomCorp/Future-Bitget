@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 import hashlib
-from typing import Any
+from typing import Any, Mapping
 
 from ai_proposal.schema import ProposalDraft
 
@@ -39,8 +39,11 @@ class PaperOrderIntent:
     order_type: str = "limit"
     order_role: str = "entry"
     reduce_only: bool = False
+    filled_quantity: Decimal = Decimal("0")
+    remaining_quantity: Decimal | None = None
 
     def to_record(self) -> dict[str, Any]:
+        remaining = self.quantity - self.filled_quantity if self.remaining_quantity is None else self.remaining_quantity
         return {
             "client_oid": self.client_oid,
             "intent_id": self.client_oid,
@@ -59,14 +62,37 @@ class PaperOrderIntent:
             "order_type": self.order_type,
             "order_role": self.order_role,
             "reduce_only": self.reduce_only,
-            "filled_quantity": "0",
-            "remaining_quantity": format(self.quantity, "f"),
+            "filled_quantity": format(self.filled_quantity, "f"),
+            "remaining_quantity": format(remaining, "f"),
             "stop_loss": self.stop_loss,
             "take_profit": self.take_profit,
             "source": "ai_agent",
             "paper": True,
             "dry_run": True,
         }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "PaperOrderIntent":
+        return cls(
+            client_oid=str(record["client_oid"]),
+            zone_id=str(record["zone_id"]),
+            decision_id=str(record["decision_id"]),
+            risk_check_id=str(record["risk_check_id"]),
+            mandate_id=str(record["mandate_id"]),
+            mandate_version=int(record["mandate_version"]),
+            symbol=str(record["symbol"]),
+            side=str(record.get("position_side") or record["side"]),
+            quantity=Decimal(str(record["quantity"])),
+            price=Decimal(str(record["price"])),
+            stop_loss=None if record.get("stop_loss") is None else str(record["stop_loss"]),
+            take_profit=None if record.get("take_profit") is None else str(record["take_profit"]),
+            state=str(record.get("state", "paper_pending")),
+            order_type=str(record.get("order_type", "limit")),
+            order_role=str(record.get("order_role") or record.get("role") or "entry"),
+            reduce_only=bool(record.get("reduce_only", False)),
+            filled_quantity=Decimal(str(record.get("filled_quantity", "0"))),
+            remaining_quantity=Decimal(str(record["remaining_quantity"])) if record.get("remaining_quantity") is not None else None,
+        )
 
 
 def intent_from_proposal(
