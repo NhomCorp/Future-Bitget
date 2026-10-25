@@ -5,6 +5,7 @@ node_modules/
 .claude/
 *.db
 *.jsonl
+!evidence/demo-verify/*.jsonl
 *.json
 !package.json
 *.csv

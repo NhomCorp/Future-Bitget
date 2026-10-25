@@ -141,6 +141,7 @@ def make_mandate(**overrides):
         loss_streak_scope="subaccount",
         loss_streak_cooldown="24h",
         allow_average_down=False,
+        position_review_interval=15,
     )
     values.update(overrides)
     return TradingMandate(**values)
@@ -228,6 +229,24 @@ class CaptureTests(unittest.TestCase):
             self.assertNotIn("day_start_equity", record.features_dict())
             self.assertEqual(transport.calls[0][0], "GET")
             self.assertEqual(transport.calls[0][2]["paptrading"], "1")
+
+    def test_bootstrap_uses_first_row_of_utc_day(self):
+        adapter, _transport = make_adapter(account_ok("1000"))
+        with EquityStore(":memory:") as store:
+            record = capture_equity_snapshot(
+                adapter,
+                store,
+                max_age_seconds=60,
+                now=NOW,
+                drawdown_unit="usdt",
+                drawdown_reference="equity_peak",
+                allow_day_start_bootstrap=True,
+            )
+            self.assertTrue(record.complete)
+            self.assertEqual(record.day_start_equity, Decimal("1000"))
+            self.assertEqual(record.daily_loss, Decimal("0"))
+            self.assertIn("DAY_START_BOOTSTRAP", record.reason_codes)
+            self.assertNotIn("DAY_START_MISSING", record.reason_codes)
 
     def test_yesterday_snapshot_becomes_day_start(self):
         adapter, _transport = make_adapter(account_ok("990"))

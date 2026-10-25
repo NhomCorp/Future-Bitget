@@ -39,9 +39,34 @@ def validate_proposal(snapshot: DecisionOpportunitySnapshot, proposal: ProposalD
         actual = getattr(proposal, field_name)
         if actual != expected:
             errors.append(_error(f"{field_name.upper()}_IMMUTABLE", field_name, f"proposal cannot change {field_name}", str(expected), str(actual)))
-    if proposal.size != snapshot.size:
+    if proposal.action == "REDUCE":
+        if proposal.size <= 0 or proposal.size > snapshot.size:
+            errors.append(
+                _error(
+                    "REDUCE_SIZE_INVALID",
+                    "size",
+                    "REDUCE size must be positive and not exceed snapshot size",
+                    str(snapshot.size),
+                    str(proposal.size),
+                )
+            )
+    elif proposal.action == "OPEN" and snapshot.size == 0:
+        if proposal.size <= 0:
+            errors.append(_error("SIZE_HARD_LIMIT", "size", "OPEN size must be positive", str(limits.max_size), str(proposal.size)))
+        expected_exposure = proposal.size * snapshot.ref_price
+        if proposal.exposure != expected_exposure:
+            errors.append(
+                _error(
+                    "EXPOSURE_IMMUTABLE",
+                    "exposure",
+                    "OPEN exposure must equal size times ref_price",
+                    str(expected_exposure),
+                    str(proposal.exposure),
+                )
+            )
+    elif proposal.size != snapshot.size:
         errors.append(_error("SIZE_IMMUTABLE", "size", "proposal cannot change size", str(snapshot.size), str(proposal.size)))
-    if proposal.exposure != snapshot.exposure:
+    if not (proposal.action == "OPEN" and snapshot.size == 0) and proposal.exposure != snapshot.exposure:
         errors.append(_error("EXPOSURE_IMMUTABLE", "exposure", "proposal cannot change exposure", str(snapshot.exposure), str(proposal.exposure)))
     if proposal.symbol not in limits.allowed_symbols:
         errors.append(_error("SYMBOL_NOT_ALLOWED", "symbol", "symbol is outside the hard allowlist", list(limits.allowed_symbols), proposal.symbol))

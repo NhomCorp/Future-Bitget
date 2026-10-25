@@ -175,6 +175,24 @@ class EquityStore:
             )
         return EquityRow(stamp, utc_date, amount, source, normalized_tags)
 
+    def first_on_date(self, utc_date: str) -> EquityRow | None:
+        day = str(utc_date or "").strip()
+        if len(day) < 10:
+            raise EquityStoreError("utc_date must be YYYY-MM-DD")
+        day = day[:10]
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT captured_at, utc_date, equity, source, tags_json
+                FROM equity_snapshots
+                WHERE utc_date = ?
+                ORDER BY captured_at ASC, snapshot_id ASC
+                LIMIT 1
+                """,
+                (day,),
+            ).fetchone()
+        return None if row is None else self._from_row(row)
+
     def last_before(self, instant: str) -> EquityRow | None:
         stamp = normalize_timestamp(instant, "instant")
         with self._lock:

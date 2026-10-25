@@ -23,6 +23,7 @@ from trader.envfile import load_os_env_file
 
 API_BASE = "https://api.bitget.com"
 PRODUCT_TYPE = "USDT-FUTURES"
+FILL_LIMIT = 20
 
 
 class BitgetAdapterError(RuntimeError):
@@ -181,10 +182,28 @@ class ReadOnlyBitgetAdapter:
             {"productType": PRODUCT_TYPE, "symbol": symbol.upper()},
         )
 
+    def public_tickers(self) -> Any:
+        return self._request(
+            "/api/v2/mix/market/tickers",
+            {"productType": PRODUCT_TYPE},
+        )
+
     def public_contract(self, symbol: str) -> Any:
         return self._request(
             "/api/v2/mix/market/contracts",
             {"productType": PRODUCT_TYPE, "symbol": symbol.upper()},
+        )
+
+    def public_candles(self, symbol: str, granularity: str, limit: int = 200) -> Any:
+        capped = max(30, min(int(limit), 200))
+        return self._request(
+            "/api/v2/mix/market/candles",
+            {
+                "productType": PRODUCT_TYPE,
+                "symbol": symbol.upper(),
+                "granularity": granularity,
+                "limit": str(capped),
+            },
         )
 
     def account(self) -> Any:
@@ -208,6 +227,35 @@ class ReadOnlyBitgetAdapter:
             private=True,
         )
 
+    def order_detail(
+        self,
+        symbol: str,
+        *,
+        client_oid: str | None = None,
+        order_id: str | None = None,
+    ) -> Any:
+        params: dict[str, Any] = {"symbol": symbol.upper(), "productType": PRODUCT_TYPE}
+        if client_oid:
+            params["clientOid"] = client_oid
+        if order_id:
+            params["orderId"] = order_id
+        return self._request("/api/v2/mix/order/detail", params, private=True)
+
+    def plan_pending(self, symbol: str, *, plan_type: str = "profit_loss") -> Any:
+        return self._request(
+            "/api/v2/mix/order/orders-plan-pending",
+            {"productType": PRODUCT_TYPE, "planType": plan_type, "symbol": symbol.upper()},
+            private=True,
+        )
+
+    def fills(self, symbol: str | None = None, *, limit: int = FILL_LIMIT) -> Any:
+        """GET recent fills. Demo uses /order/fills, not fill-history."""
+        capped = max(1, min(int(limit), 100))
+        params: dict[str, Any] = {"productType": PRODUCT_TYPE, "limit": str(capped)}
+        if symbol:
+            params["symbol"] = symbol.upper()
+        return self._request("/api/v2/mix/order/fills", params, private=True)
+
     def snapshot(self, *, symbol: str | None = None) -> dict[str, Any]:
         """Return only GET-derived fields for CLI preview/status/sync."""
         snapshot: dict[str, Any] = {
@@ -215,6 +263,7 @@ class ReadOnlyBitgetAdapter:
             "account": self.account(),
             "positions": self.positions() or [],
             "pending_orders": self.pending_orders() or [],
+            "fills": self.fills(symbol) or [],
         }
         if symbol:
             snapshot["ticker"] = self.public_ticker(symbol)

@@ -44,7 +44,7 @@ ai_proposal/
   provider_config.py# đọc config không lộ secret
   decision.py       # schema decision/order proposal mở rộng
   prompt.py         # dựng context ổn định và redacted
-  adapter.py        # gọi provider, parse structured output, fallback NO_TRADE
+  adapter.py        # gọi provider một lần, parse JSON, lỗi → NO_TRADE; Demo scan đã nối
 
 trading/
   mandate.py        # immutable mandate/version và state
@@ -65,9 +65,15 @@ Tên module là thiết kế đề xuất, chưa tạo file cho đến khi kế 
 2. Snapshot builder gắn `snapshot_at`, `feature_as_of`, freshness deadline và `mandate_version`.
 3. Nếu snapshot không đủ, stale, hoặc zone đang `UNKNOWN/STOPPING`, ghi `DECISION_BLOCKED` và trả `NO_TRADE` nội bộ.
 
+Hai lớp (dự thảo, xem spec mục 5.3):
+
+- **Dashboard:** GET account/position/orders/fills để bảng Tổng quan hiện vị thế, lệnh chờ và fills gần nhất; đối soát UI với zone local (chỉ đọc). Thiếu thì không bịa. Frontend GET Demo **đã nối** (một lần + làm mới tay, không poll, không POST).
+- **Bảo vệ:** poll/WS ngắn cho mark, fill, SL, `UNKNOWN`. Không chờ chu kỳ quét. Paper **đã có** CLI local ([`trading/protect_clock.py`](../trading/protect_clock.py)): tick/loop inject quan sát, reconcile fill, mark chạm SL/loss → emergency dry-run một lần; stale/`UNKNOWN` không bắn SL bịa; module không POST; không gọi PaperAgent. Demo cycle **đã có** GET mark/fill rồi gọi `kill_symbol` opt-in khi trigger. WebSocket **chưa có**.
+- **Chu kỳ quét:** tới giờ phân tích lại rồi ra phương án **theo tình huống** (0, 1 hoặc nhiều hành động). Từng bước qua Risk Engine. Paper dùng `metadata.plan_actions` (tối đa 4). Nới SL paper được nếu remaining loss-to-SL còn trong hard limit. Paper tick local **đã có** ([`trading/paper_scan.py`](../trading/paper_scan.py)): đọc interval, gọi `PaperAgent.run()` khi tới giờ; stale/`UNKNOWN`/chưa tới giờ → `NO_TRADE`; hết giờ không flatten; không gộp đồng hồ bảo vệ. Mặc định không POST; CLI `--place-orders --i-confirm-demo` POST place/cancel/close + TPSL OPEN chỉ symbol trong `mandate.allowed_symbols`; GET reconcile sau gửi; live khóa; protect clock không gọi dispatcher. Demo cycle [`trading/demo_cycle.py`](../trading/demo_cycle.py) GET mới + equity + protect + scan nếu tới giờ. Kill flatten whitelist không qua AI.
+
 ### 3.2 AI phase
 
-1. Provider adapter nhận snapshot đã lọc, không nhận API key hoặc thông tin không cần thiết.
+1. Provider adapter nhận snapshot đã lọc, không nhận API key hoặc thông tin không cần thiết. Demo scan **đã nối** [`ai_proposal/adapter.py`](../ai_proposal/adapter.py) (Gemini / OpenAI-compatible, HTTPS công khai, một lần gọi).
 2. Prompt yêu cầu duy nhất một structured decision theo schema.
 3. Response được parse bằng schema chặt, giới hạn độ dài và `valid_until`.
 4. Provider exception, timeout, HTTP error, parse error hoặc schema mismatch đều tạo `NO_TRADE`/rejected record với mã ổn định.
@@ -142,7 +148,7 @@ Quy tắc policy đã chốt cho P0:
 - Khi chạm zone loss limit hoặc daily loss limit, hủy entry/DCA, chặn tăng rủi ro và thực hiện `daily_loss_action` hoặc emergency policy tương ứng.
 - Khi đạt `max_consecutive_losses`, chuyển `COOLDOWN`, chặn entry mới và chỉ khôi phục sau thời gian/phê duyệt được mandate quy định. Không reset loss streak bằng cách đổi symbol, zone hoặc model.
 - `allow_average_down=false` mặc định theo hướng an toàn; khi bật phải có DCA plan và risk budget riêng.
-- Không gồng lệnh: không được nới SL theo hướng tăng rủi ro, tăng size để bù lỗ hoặc tạo lệnh mới để gỡ lệnh đang lỗ.
+- Không gồng lệnh: không tăng size để bù lỗ, không tạo lệnh mới để gỡ lỗ. Paper `ADJUST_SL`: nới được nếu remaining loss-to-SL còn trong hard limit; khác P0 mục 7 cho tới khi chốt.
 - Khi zone đã bắt đầu, config là bất biến; thay đổi phải tạo version mới cho episode mới.
 
 `daily_loss_scope`, `drawdown_scope` và `drawdown_reference` phải được lưu rõ trong mandate. Nếu chưa được xác định, mandate không được chuyển sang trạng thái có thể tạo intent tăng rủi ro. `max_leverage` và các trường vốn/risk bắt buộc cũng phải có giá trị hợp lệ trước P2 Demo. Mặc định của thiết kế là không cho thực thi khi các trường này còn `TBD`, không tự suy diễn giá trị an toàn.

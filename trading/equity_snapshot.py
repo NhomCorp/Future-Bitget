@@ -2,7 +2,8 @@
 
 Missing, stale, or unparsable equity does not invent numbers. The caller must
 pass the resulting features into the risk engine; this module never dispatches
-orders and never talks to the frontend.
+orders and never talks to the frontend. Demo cycle may pass
+``allow_day_start_bootstrap`` so the first UTC-day row becomes session start.
 """
 from __future__ import annotations
 
@@ -166,6 +167,8 @@ def capture_equity_snapshot(
     drawdown_reference: str,
     captured_at: str | None = None,
     tags: tuple[str, ...] = (),
+    account_payload: Any | None = None,
+    allow_day_start_bootstrap: bool = False,
 ) -> EquitySnapshotRecord:
     """GET account equity, append a local row, and compute fail-closed features."""
     unit = str(drawdown_unit or "").strip().lower()
@@ -187,7 +190,7 @@ def capture_equity_snapshot(
         reasons.append("DRAWDOWN_REFERENCE_MISSING")
 
     try:
-        payload = adapter.account()
+        payload = adapter.account() if account_payload is None else account_payload
     except LiveModeDisabled:
         return _incomplete(["EQUITY_LIVE_DISABLED", *reasons], drawdown_unit=unit_ok, drawdown_reference=reference_ok)
     except MissingReadOnlyCredentials:
@@ -218,12 +221,18 @@ def capture_equity_snapshot(
         reasons.append("EQUITY_STALE")
 
     day_start_row = store.last_before(utc_day_start(now_stamp))
+    bootstrap = False
+    if day_start_row is None and allow_day_start_bootstrap:
+        day_start_row = store.first_on_date(now_stamp[:10])
+        bootstrap = day_start_row is not None
     day_start = None if day_start_row is None else day_start_row.equity
     if day_start is None:
         reasons.append("DAY_START_MISSING")
         daily_loss = None
         daily_loss_at = None
     else:
+        if bootstrap:
+            reasons.append("DAY_START_BOOTSTRAP")
         daily_loss = day_start - current
         if daily_loss < 0:
             daily_loss = Decimal("0")

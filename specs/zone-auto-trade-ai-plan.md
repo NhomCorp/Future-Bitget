@@ -72,6 +72,7 @@ Giới hạn này là ngưỡng điều khiển của bot, không phải cam k�
 - AI học/ranking hành động và giải thích dựa trên dữ liệu đã ghi; chế độ thực thi được điều khiển bởi `ai_autonomy` trong mandate.
 - TA envelope, policy deterministic và risk engine kiểm tra mọi proposal/order intent. AI không tự tính hoặc ghi đè size, margin, liquidation, giới hạn lỗ, symbol/side allowlist hay hard limits.
 - AI được tự chọn thời điểm, symbol, side và chiến thuật trong allowlist khi mode `AUTONOMOUS_WITHIN_MANDATE` đã được bật. Đây là quyền tự chủ có giới hạn, không phải quyền tùy ý.
+- Dự thảo chu kỳ (chưa chốt P0): mỗi lần quét phân tích rồi ra phương án linh hoạt theo tình huống (0–nhiều hành động, trong mandate); nới SL được nếu Risk Engine duyệt — khác P0 mục 7 cho tới khi chốt. Paper đợt D đã code combo/`ADJUST_SL` local, không POST. Chi tiết: [`ai-agent-autonomous-trading.md`](ai-agent-autonomous-trading.md) mục 5.3.
 - AI không tự thay model/policy trong lúc có vị thế, không tự nạp kiến thức chưa version hóa vào live context và không tự cấp thêm vốn.
 - Quyền AI tự gửi lệnh chỉ được bật sau cổng hiệu quả và kỹ thuật đạt, phạm vi vốn nhỏ, kill switch, key trade không có withdrawal và xác nhận chủ tài khoản.
 

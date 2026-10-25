@@ -48,8 +48,13 @@ def _strings(values: tuple[str, ...], name: str, *, lower: bool = False) -> tupl
 
 
 AI_AUTONOMY_MODES = frozenset({"PROPOSAL_ONLY", "MANAGED_ZONE", "AUTONOMOUS_WITHIN_MANDATE"})
+MANDATE_ACTIONS = frozenset({"OPEN", "CLOSE", "REDUCE", "HOLD", "NO_TRADE", "ADJUST_SL", "CANCEL"})
 DAILY_LOSS_ACTIONS = frozenset({"FREEZE_ENTRY", "EMERGENCY_FLATTEN"})
 MANDATE_STATES = frozenset({"ENABLED", "PAUSED", "COOLDOWN", "REVOKED", "EXPIRED"})
+POSITION_REVIEW_INTERVAL_UNIT = "minutes"
+POSITION_REVIEW_INTERVAL_MIN = 1
+POSITION_REVIEW_INTERVAL_MAX = 240
+POSITION_REVIEW_INTERVAL_SUGGESTIONS = (5, 15, 30, 60)
 
 
 @dataclass(frozen=True)
@@ -95,6 +100,7 @@ class TradingMandate:
     loss_streak_scope: str | None = None
     loss_streak_cooldown: str | None = None
     allow_average_down: bool = False
+    position_review_interval: int | None = None
 
     def __post_init__(self) -> None:
         for name in ("mandate_id", "zone_id"):
@@ -108,7 +114,7 @@ class TradingMandate:
         actions = _strings(self.allowed_actions, "allowed_actions")
         if not set(sides) <= {"long", "short"}:
             raise MandateError("allowed_sides may contain only long or short")
-        if not set(actions) <= {"OPEN", "CLOSE", "REDUCE", "HOLD", "NO_TRADE"}:
+        if not set(actions) <= MANDATE_ACTIONS:
             raise MandateError("allowed_actions contains an unsupported action")
         object.__setattr__(self, "allowed_symbols", symbols)
         object.__setattr__(self, "allowed_sides", sides)
@@ -184,6 +190,15 @@ class TradingMandate:
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise MandateError(f"{name} must be non-empty when configured")
+        if self.position_review_interval is not None:
+            interval = self.position_review_interval
+            if isinstance(interval, bool) or not isinstance(interval, int):
+                raise MandateError("position_review_interval must be an integer number of minutes")
+            if interval < POSITION_REVIEW_INTERVAL_MIN or interval > POSITION_REVIEW_INTERVAL_MAX:
+                raise MandateError(
+                    "position_review_interval must be between "
+                    f"{POSITION_REVIEW_INTERVAL_MIN} and {POSITION_REVIEW_INTERVAL_MAX} minutes"
+                )
 
     def is_active(self, now: str) -> bool:
         current = _timestamp(now, "now")
@@ -226,6 +241,8 @@ class TradingMandate:
             missing.append("drawdown_scope")
         if not self.drawdown_reference:
             missing.append("drawdown_reference")
+        if self.position_review_interval is None:
+            missing.append("position_review_interval")
         return tuple(missing)
 
     def to_dict(self) -> dict[str, Any]:
@@ -269,6 +286,7 @@ class TradingMandate:
             "loss_streak_scope": self.loss_streak_scope,
             "loss_streak_cooldown": self.loss_streak_cooldown,
             "allow_average_down": self.allow_average_down,
+            "position_review_interval": self.position_review_interval,
         }
 
     @classmethod
@@ -313,4 +331,5 @@ class TradingMandate:
             loss_streak_scope=value.get("loss_streak_scope"),
             loss_streak_cooldown=value.get("loss_streak_cooldown"),
             allow_average_down=value.get("allow_average_down", False),
+            position_review_interval=value.get("position_review_interval"),
         )

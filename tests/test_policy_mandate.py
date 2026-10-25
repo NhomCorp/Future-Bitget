@@ -4,7 +4,13 @@ import unittest
 from decimal import Decimal
 
 from ai_proposal.schema import DecisionOpportunitySnapshot, HardLimits, ProposalDraft
-from trading.mandate import TradingMandate
+from trading.mandate import (
+    MandateError,
+    POSITION_REVIEW_INTERVAL_MAX,
+    POSITION_REVIEW_INTERVAL_MIN,
+    POSITION_REVIEW_INTERVAL_SUGGESTIONS,
+    TradingMandate,
+)
 from trading.risk_engine import evaluate_decision
 
 
@@ -88,6 +94,7 @@ def make_mandate(**overrides):
         loss_streak_scope="subaccount",
         loss_streak_cooldown="24h",
         allow_average_down=False,
+        position_review_interval=15,
     )
     values.update(overrides)
     return TradingMandate(**values)
@@ -155,12 +162,34 @@ class PolicyRiskTests(unittest.TestCase):
         self.assertEqual(result.risk_check.result, "PAUSED")
         self.assertIn("POLICY_INCOMPLETE", result.risk_check.reason_codes)
 
-    def test_autonomous_open_is_rejected(self):
+    def test_autonomous_open_is_approved_when_limits_pass(self):
         snapshot = make_snapshot()
         mandate = make_mandate(ai_autonomy="AUTONOMOUS_WITHIN_MANDATE")
         result = evaluate_decision(snapshot, make_proposal(snapshot), mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+        self.assertNotIn("AUTONOMY_NOT_ENABLED", result.risk_check.reason_codes)
+
+    def test_adjust_sl_tighten_is_approved(self):
+        snapshot = make_snapshot(current_stop_loss="95")
+        mandate = make_mandate(allowed_actions=("OPEN", "CLOSE", "REDUCE", "ADJUST_SL", "NO_TRADE"))
+        proposal = make_proposal(snapshot, action="ADJUST_SL", stop_loss="96", leverage="2")
+        result = evaluate_decision(snapshot, proposal, mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+
+    def test_adjust_sl_widen_within_budget_is_approved(self):
+        snapshot = make_snapshot(current_stop_loss="96")
+        mandate = make_mandate(allowed_actions=("OPEN", "CLOSE", "REDUCE", "ADJUST_SL", "NO_TRADE"))
+        proposal = make_proposal(snapshot, action="ADJUST_SL", stop_loss="95", leverage="2")
+        result = evaluate_decision(snapshot, proposal, mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+
+    def test_adjust_sl_widen_over_order_risk_is_rejected(self):
+        snapshot = make_snapshot(current_stop_loss="95")
+        mandate = make_mandate(allowed_actions=("OPEN", "CLOSE", "REDUCE", "ADJUST_SL", "NO_TRADE"))
+        proposal = make_proposal(snapshot, action="ADJUST_SL", stop_loss="90", leverage="2")
+        result = evaluate_decision(snapshot, proposal, mandate, now=NOW)
         self.assertEqual(result.risk_check.result, "REJECTED")
-        self.assertIn("AUTONOMY_NOT_ENABLED", result.risk_check.reason_codes)
+        self.assertIn("ORDER_RISK_LIMIT", result.risk_check.reason_codes)
 
     def test_average_down_is_disabled_by_default(self):
         snapshot = make_snapshot()
@@ -180,6 +209,38 @@ class PolicyRiskTests(unittest.TestCase):
         result = evaluate_decision(snapshot, make_proposal(snapshot), make_mandate(), now=NOW)
         self.assertEqual(result.risk_check.result, "PAUSED")
         self.assertIn("LOSS_STREAK_LIMIT", result.risk_check.reason_codes)
+
+    def test_missing_review_interval_is_paused(self):
+        snapshot = make_snapshot()
+        mandate = make_mandate(position_review_interval=None)
+        result = evaluate_decision(snapshot, make_proposal(snapshot), mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "PAUSED")
+        self.assertIn("POLICY_INCOMPLETE", result.risk_check.reason_codes)
+        self.assertIn("position_review_interval", mandate.missing_policy_fields())
+
+    def test_review_interval_must_be_integer_minutes(self):
+        with self.assertRaises(MandateError):
+            make_mandate(position_review_interval=15.5)
+        with self.assertRaises(MandateError):
+            make_mandate(position_review_interval=True)
+        with self.assertRaises(MandateError):
+            make_mandate(position_review_interval=POSITION_REVIEW_INTERVAL_MIN - 1)
+        with self.assertRaises(MandateError):
+            make_mandate(position_review_interval=POSITION_REVIEW_INTERVAL_MAX + 1)
+
+    def test_review_interval_suggestions_are_valid_and_not_defaults(self):
+        self.assertEqual(POSITION_REVIEW_INTERVAL_SUGGESTIONS, (5, 15, 30, 60))
+        for minutes in POSITION_REVIEW_INTERVAL_SUGGESTIONS:
+            mandate = make_mandate(position_review_interval=minutes)
+            self.assertEqual(mandate.position_review_interval, minutes)
+            self.assertTrue(mandate.policy_complete())
+        restored = TradingMandate.from_dict(make_mandate().to_dict())
+        self.assertEqual(restored.position_review_interval, 15)
+        legacy = TradingMandate.from_dict(
+            {key: value for key, value in make_mandate().to_dict().items() if key != "position_review_interval"}
+        )
+        self.assertIsNone(legacy.position_review_interval)
+        self.assertFalse(legacy.policy_complete())
 
 
 if __name__ == "__main__":

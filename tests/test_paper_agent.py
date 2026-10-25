@@ -68,8 +68,10 @@ class FakeProvider:
     def __init__(self, proposal=None, error=None):
         self.proposal = proposal
         self.error = error
+        self.calls = 0
 
     def propose(self, snapshot):
+        self.calls += 1
         if self.error:
             raise self.error
         return self.proposal
@@ -120,6 +122,7 @@ class PaperAgentTests(unittest.TestCase):
             loss_streak_scope="subaccount",
             loss_streak_cooldown="24h",
             allow_average_down=False,
+            position_review_interval=15,
         )
         values.update(overrides)
         return TradingMandate(**values)
@@ -179,12 +182,65 @@ class PaperAgentTests(unittest.TestCase):
         self.assertEqual(self.store.paper_intents("zone-paper"), [])
         self.assertTrue(any(event["event"] == "RISK_CHECKED" for event in self.store.agent_events("zone-paper")))
 
-    def test_autonomous_mode_creates_no_intent(self):
+    def test_autonomous_mode_creates_paper_intent(self):
         mandate = self._mandate(ai_autonomy="AUTONOMOUS_WITHIN_MANDATE")
         result = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, mandate, now=NOW)
-        self.assertIsNone(result.intent)
-        self.assertIsNone(result.risk_check)
-        self.assertEqual(self.store.agent_events("zone-paper")[0]["reason_code"], "AUTONOMY_NOT_ENABLED")
+        self.assertEqual(result.risk_check.result, "APPROVED")
+        self.assertIsNotNone(result.intent)
+        self.assertEqual(len(self.store.paper_intents("zone-paper")), 1)
+
+    def test_plan_actions_creates_approved_steps_only(self):
+        mandate = self._mandate(allowed_actions=("OPEN", "CLOSE", "REDUCE", "ADJUST_SL", "NO_TRADE"))
+        snapshot = make_snapshot()
+        snapshot = DecisionOpportunitySnapshot(
+            opportunity_id=snapshot.opportunity_id,
+            snapshot_at=snapshot.snapshot_at,
+            feature_as_of=snapshot.feature_as_of,
+            symbol=snapshot.symbol,
+            side=snapshot.side,
+            state=snapshot.state,
+            ref_price=snapshot.ref_price,
+            sl_pct=snapshot.sl_pct,
+            loss_budget=snapshot.loss_budget,
+            size=snapshot.size,
+            exposure=snapshot.exposure,
+            hard_limits=snapshot.hard_limits,
+            features={**dict(snapshot.features), "current_stop_loss": "95"},
+        )
+        proposal = make_proposal(
+            snapshot,
+            action="REDUCE",
+            metadata={
+                "leverage": "2",
+                "order_type": "limit",
+                "order_role": "reduce",
+                "reduce_only": True,
+                "stop_loss": "96",
+                "plan_actions": [
+                    {"action": "REDUCE", "size": "0.4", "order_type": "limit", "order_role": "reduce", "reduce_only": True, "leverage": "2"},
+                    {"action": "ADJUST_SL", "stop_loss": "96", "leverage": "2"},
+                    {"action": "OPEN", "order_role": "dca", "stop_loss": "95", "leverage": "2"},
+                ],
+            },
+        )
+        result = PaperAgent(FakeProvider(proposal), self.store).run(snapshot, mandate, now=NOW)
+        self.assertEqual(len(result.risk_checks), 3)
+        self.assertEqual(result.risk_checks[0].result, "APPROVED")
+        self.assertEqual(result.risk_checks[1].result, "APPROVED")
+        self.assertEqual(result.risk_checks[2].result, "REJECTED")
+        self.assertIn("AVERAGE_DOWN_DISABLED", result.risk_checks[2].reason_codes)
+        self.assertEqual(len(result.intents), 2)
+        self.assertEqual(result.intents[0].order_role, "reduce")
+        self.assertEqual(result.intents[1].order_role, "adjust_sl")
+
+    def test_autonomous_open_without_zone_creates_local_zone(self):
+        mandate = self._mandate(zone_id="zone-ai-new", ai_autonomy="AUTONOMOUS_WITHIN_MANDATE")
+        result = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, mandate, now=NOW)
+        self.assertEqual(result.risk_check.result, "APPROVED")
+        self.assertIsNotNone(result.intent)
+        zone = self.zones.get_zone("zone-ai-new")
+        self.assertEqual(zone.state, "ACTIVE")
+        self.assertEqual(str(zone.config.get("opened_by")), "ai")
 
     def test_close_creates_reduce_only_paper_intent(self):
         proposal = make_proposal(

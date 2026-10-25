@@ -4,7 +4,7 @@ Examples:
   python -m trader.demo_verify_cli run --symbol BTCUSDT --json
   python -m trader.demo_verify_cli run --symbol BTCUSDT --place-orders --i-confirm-demo
 
-Default is GET-only baseline (Bước A / D0-D4). POST for D5-D6 requires both
+Default is GET-only baseline (Bước A / D0-D4). POST for D5-D10 requires both
 ``--place-orders`` and ``--i-confirm-demo``. This CLI is not a dispatcher and
 never sets GROK_TRADER_ALLOW_LIVE.
 """
@@ -34,7 +34,7 @@ def _parser() -> argparse.ArgumentParser:
     run_cmd.add_argument(
         "--place-orders",
         action="store_true",
-        help="allow Demo POST for far-from-market limit + cancel (D5-D6)",
+        help="allow Demo POST for D5-D10 (limit/cancel, fill, timeout, retry, close)",
     )
     run_cmd.add_argument(
         "--i-confirm-demo",

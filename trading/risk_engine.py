@@ -7,7 +7,7 @@ from decimal import Decimal
 import hashlib
 from typing import Any
 
-from ai_proposal.schema import DecisionOpportunitySnapshot, ProposalDraft, ProposalRecord
+from ai_proposal.schema import DecisionOpportunitySnapshot, ProposalDraft, ProposalRecord, parse_plan_actions
 from ai_proposal.validator import evaluate_proposal
 from .mandate import TradingMandate
 
@@ -68,8 +68,59 @@ def _context_timestamp(snapshot: DecisionOpportunitySnapshot, name: str) -> date
     return parsed.astimezone(timezone.utc)
 
 
-def increases_risk(proposal: ProposalDraft) -> bool:
-    return proposal.action not in {"CLOSE", "REDUCE", "HOLD", "NO_TRADE"}
+_REDUCE_ACTIONS = frozenset({"CLOSE", "REDUCE", "HOLD", "NO_TRADE", "CANCEL"})
+
+
+def _stop_price(proposal: ProposalDraft, snapshot: DecisionOpportunitySnapshot | None = None) -> Decimal | None:
+    raw = proposal.metadata.get("stop_loss")
+    if raw is None and snapshot is not None:
+        raw = snapshot.features.get("current_stop_loss")
+        if raw is None:
+            raw = snapshot.features.get("stop_loss")
+    if raw is None:
+        return None
+    try:
+        value = Decimal(str(raw))
+    except Exception:
+        return None
+    return value if value.is_finite() and value > 0 else None
+
+
+def remaining_loss_to_stop(
+    snapshot: DecisionOpportunitySnapshot,
+    stop_loss: Decimal,
+    *,
+    size: Decimal | None = None,
+) -> Decimal | None:
+    qty = snapshot.size if size is None else size
+    if snapshot.side == "long":
+        if stop_loss >= snapshot.ref_price:
+            return None
+        return (snapshot.ref_price - stop_loss) * qty
+    if stop_loss <= snapshot.ref_price:
+        return None
+    return (stop_loss - snapshot.ref_price) * qty
+
+
+def stop_widens(snapshot: DecisionOpportunitySnapshot, proposal: ProposalDraft) -> bool:
+    """True when the new stop is farther from price than the current stop."""
+    current = _context_decimal(snapshot, "current_stop_loss") or _context_decimal(snapshot, "stop_loss")
+    new_stop = _stop_price(proposal)
+    if current is None or new_stop is None:
+        return False
+    if snapshot.side == "long":
+        return new_stop < current
+    return new_stop > current
+
+
+def increases_risk(proposal: ProposalDraft, snapshot: DecisionOpportunitySnapshot | None = None) -> bool:
+    if proposal.action in _REDUCE_ACTIONS:
+        return False
+    if proposal.action == "ADJUST_SL":
+        if snapshot is None:
+            return True
+        return stop_widens(snapshot, proposal)
+    return True
 
 
 def _order_role(proposal: ProposalDraft) -> str:
@@ -88,18 +139,22 @@ def evaluate_decision(
     """Validate proposal and return a durable-ready result; never dispatch orders."""
     checked_at = now or _utc_now()
     reasons: list[str] = []
-    new_risk = increases_risk(proposal)
+    _, plan_error = parse_plan_actions(proposal.metadata.get("plan_actions"))
+    if plan_error:
+        reasons.append(plan_error)
+    new_risk = increases_risk(proposal, snapshot)
     if not mandate.is_active(checked_at):
         reasons.append("MANDATE_INACTIVE")
     if kill_switch:
         reasons.append("KILL_SWITCH_ACTIVE")
     if stale:
         reasons.append("SNAPSHOT_STALE")
+    zone_state = str(snapshot.features.get("zone_state") or snapshot.state).upper()
+    if zone_state in {"STOPPING", "UNKNOWN"} and proposal.action not in {"CLOSE", "REDUCE", "CANCEL"}:
+        reasons.append("ZONE_STATE_BLOCKS_ACTION")
     if not mandate.policy_complete():
         reasons.append("POLICY_INCOMPLETE")
     else:
-        if mandate.ai_autonomy == "AUTONOMOUS_WITHIN_MANDATE" and new_risk:
-            reasons.append("AUTONOMY_NOT_ENABLED")
         if mandate.state == "COOLDOWN" and new_risk:
             reasons.append("LOSS_STREAK_COOLDOWN")
         leverage_value = proposal.metadata.get("leverage")
@@ -197,6 +252,25 @@ def evaluate_decision(
                     reasons.append("ORDER_RISK_LIMIT")
         except Exception:
             reasons.append("PROTECTIVE_STOP_INVALID")
+    if proposal.action == "ADJUST_SL":
+        new_stop = _stop_price(proposal)
+        if new_stop is None:
+            reasons.append("PROTECTIVE_STOP_REQUIRED")
+        else:
+            remaining = remaining_loss_to_stop(snapshot, new_stop, size=proposal.size)
+            if remaining is None:
+                reasons.append("PROTECTIVE_STOP_WRONG_SIDE")
+            else:
+                remaining_budget = _context_decimal(snapshot, "remaining_loss_budget")
+                if remaining_budget is None:
+                    remaining_budget = mandate.loss_budget
+                if remaining > mandate.max_order_risk:
+                    reasons.append("ORDER_RISK_LIMIT")
+                if remaining > remaining_budget:
+                    reasons.append("SL_REMAINING_EXCEEDS_LIMIT")
+                current = _context_decimal(snapshot, "current_stop_loss") or _context_decimal(snapshot, "stop_loss")
+                if current is not None and new_stop == current:
+                    reasons.append("SL_UNCHANGED")
 
     proposal_record = evaluate_proposal(snapshot, proposal)
     if proposal_record.result != "ACCEPTED":

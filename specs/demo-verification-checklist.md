@@ -1,6 +1,6 @@
 # Checklist xác minh Bitget Demo cho zone
 
-- Trạng thái: Checklist đã chốt. Harness local [`trader/demo_verify.py`](../trader/demo_verify.py) / CLI [`trader/demo_verify_cli.py`](../trader/demo_verify_cli.py) đã có. Demo 2026-10-22 `BTCUSDT`: D0–D6 PASS (`isolated`, `hedge_mode`, `paptrading: 1`; D5 limit `FOUND`, D6 cancel `canceled`). D7–D15 chưa chạy trên Demo.
+- Trạng thái: Checklist đã chốt. Harness local [`trader/demo_verify.py`](../trader/demo_verify.py) / CLI [`trader/demo_verify_cli.py`](../trader/demo_verify_cli.py) đã có. Demo 2026-10-22 `BTCUSDT` (`isolated`, `hedge_mode`, `paptrading: 1`): D0–D6 PASS; D7 UNKNOWN (2 lot tại `last` khớp hết trong một lần GET, không thấy partial); D8–D10 PASS; D11 PASS (`pos_loss` + `mark_price` khi còn long); D12–D13 PASS; D14–D15 UNKNOWN (có `unrealizedPL`/`deductedFee`/`liquidationPrice`, chưa tách realized/funding, không có sự kiện thanh lý). Bằng chứng: [`evidence/demo-verify/2026-10-22-btcusdt.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt.jsonl), [`evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl), [`evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl).
 - Phạm vi: Bitget USDT-M Futures Classic API, tài khoản Demo, không live
 - Liên quan: [`zone-risk-policy.md`](zone-risk-policy.md), [`ai-agent-autonomous-trading.md`](ai-agent-autonomous-trading.md)
 - Tài liệu API: [Demo Trading REST API](https://www.bitget.com/docs/classic/demo-trading/rest-api), [Classic Contract Trade API](https://www.bitget.com/docs/catalog/classic-contract-trade/classic-contract-trade), [Classic Contract Account API](https://www.bitget.com/docs/catalog/classic-contract-account/classic-contract-account)
@@ -15,7 +15,9 @@
 - [x] Môi trường ứng dụng xác nhận `BITGET_ENV=demo`; không bật `GROK_TRADER_ALLOW_LIVE`.
 - [ ] Giới hạn vốn Demo và symbol test được ghi trước khi chạy.
 - [ ] Có cách dừng thủ công và không chạy đồng thời thao tác bằng tay trên cùng symbol trong lúc test.
-- [ ] Mỗi case lưu request đã redaction, response đã redaction, timestamp và kết luận.
+- [x] D0–D6: harness JSONL đã redaction, timestamp và kết luận — [`evidence/demo-verify/2026-10-22-btcusdt.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt.jsonl). Không dump raw HTTP.
+- [x] D7–D10: [`evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl) — D7 UNKNOWN; D8 timeout/`FOUND`/`NOT_FOUND` không place bù; D9 trùng `clientOid` bị `REJECTED`; D10 hedge close long = `buy`+`close`, leftover đã flatten.
+- [x] D11–D15: [`evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl) — D11 PASS; D12–D13 PASS; D14–D15 UNKNOWN.
 
 **Điều kiện dừng ngay:** phát hiện host live, thiếu header Demo, sai product type, trạng thái tài khoản không rõ, hoặc response không thể đối soát.
 
@@ -134,7 +136,7 @@ Chỉ xem xét viết dispatcher Demo sau khi:
 - Đã có: adapter GET-only, zone store SQLite, zone executor dry-run, state machine cục bộ, test mock cho partial fill/timeout/unknown/idempotency, và harness DemoVerify.
 - Harness: `python -m trader.demo_verify_cli run --symbol BTCUSDT` (GET D0-D4). POST Demo D5-D6 cần `--place-orders --i-confirm-demo`. Không sửa `trader/bgapi.py`, không bật `GROK_TRADER_ALLOW_LIVE`, không phải dispatcher.
 - Test mock: [`tests/test_demo_verify.py`](../tests/test_demo_verify.py) cover `FOUND`, `REJECTED`, `VERIFIED_NOT_RECEIVED`, `UNKNOWN`; isolated bắt buộc; leftover position chặn entry; live env fail-closed.
-- Chưa có: Demo dispatcher, reconcile với exchange, restart recovery dựa trên trạng thái sàn.
-- Demo 2026-10-22 `BTCUSDT`: D0–D6 PASS. D2 từng FAIL khi `crossed`, PASS sau khi tài khoản ở `isolated`. D5 limit `FOUND`, D6 cancel `canceled` (harness `--place-orders --i-confirm-demo`). D7–D15 chưa chạy.
-- D7-D15 không tự chạy trong harness (fill/timeout thật, duplicate clientOid trên sàn, close/reduce, stop/TP, risk trigger, restart, funding/PnL, liquidation).
-- Vì vậy hiện tại: **D0–D6 đã PASS trên Demo; D7–D15 chưa**. Cổng `DemoDispatch` vẫn đóng.
+- Dispatcher Demo: [`trading/demo_dispatch.py`](../trading/demo_dispatch.py); mặc định dry-run; paper scan CLI POST place/cancel/close + TPSL OPEN khi `--place-orders --i-confirm-demo` và symbol nằm trong `mandate.allowed_symbols`; GET order detail sau gửi; kill CLI flatten whitelist; whitelist rỗng hoặc ngoài list thì không POST; protect clock **không** gọi; demo cycle có thể gọi `kill_symbol` khi protect trigger. Restart theo trạng thái sàn **chưa có**.
+- Demo 2026-10-22 `BTCUSDT`: D0–D6 PASS. D2 từng FAIL khi `crossed`, PASS sau khi tài khoản ở `isolated`. D5 limit `FOUND`, D6 cancel `canceled` (harness `--place-orders --i-confirm-demo`). Bằng chứng: [`evidence/demo-verify/2026-10-22-btcusdt.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt.jsonl) (`clientOid` đã che giữa; equity chỉ `present`/`missing`). D7 UNKNOWN; D8–D10 PASS. D11 PASS (`pos_loss` lúc còn vị thế, GET `planType=profit_loss` thấy `mark_price`); D12–D13 PASS; D14–D15 UNKNOWN. Bằng chứng: [`evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d7-d10.jsonl), [`evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl`](../evidence/demo-verify/2026-10-22-btcusdt-d11-d15.jsonl).
+- D11 đặt `pos_loss` khi còn long, rồi mới flatten; trigger fill/liq thật không mô phỏng. D7 poll nhanh hơn vẫn thấy khớp full 2 lot, không partial.
+- Vì vậy hiện tại: **D0–D6 PASS; D7 UNKNOWN; D8–D13 PASS; D14–D15 UNKNOWN**. Chủ dự án đã mở cổng Demo POST từ paper scan trong whitelist (CLI `--place-orders --i-confirm-demo`); D7/D14/D15 vẫn UNKNOWN; live vẫn khóa.

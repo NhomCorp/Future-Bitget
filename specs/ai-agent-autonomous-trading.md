@@ -1,6 +1,6 @@
 # Spec: AI Agent tự phân tích và giao dịch có hạn mức
 
-- Trạng thái: Dự thảo cập nhật 2026-10-22, chờ chủ dự án duyệt. Bản trước đã duyệt giới hạn AI ở proposal-only và chỉ quản lý zone do người dùng mở; bản này mở quyền tự chủ có kiểm soát trong mandate.
+- Trạng thái: Dự thảo cập nhật 2026-10-22, chờ chủ dự án duyệt. Bản trước đã duyệt giới hạn AI ở proposal-only và chỉ quản lý zone do người dùng mở; bản này mở quyền tự chủ có kiểm soát trong mandate. Mục 5.3: mỗi lần quét phân tích rồi ra phương án linh hoạt theo tình huống (0, 1 hoặc nhiều hành động); nới SL được nếu Risk Engine duyệt. Khác P0 mục 7 cho tới khi chốt. Paper đợt D: `metadata.plan_actions` (tối đa 4) và `ADJUST_SL` **đã có** local, không POST.
 - Thiết kế triển khai: [`ai-agent-implementation-design.md`](ai-agent-implementation-design.md)
 - Phạm vi: Thiết kế nghiệp vụ cho AI Agent giao dịch Bitget USDT-M Futures trong hạn mức được cấp
 - Không phải giấy phép bật live: mọi triển khai thực tế phải đi qua các cổng Demo, paper trading, shadow và live vốn nhỏ
@@ -14,6 +14,7 @@
 - Bổ sung phạm vi kiến thức người dùng và học offline của AI.
 - Chưa chốt và không được tự đặt: số vốn, tỷ lệ rủi ro mỗi lệnh, lỗ tối đa ngày, drawdown tối đa, số lệnh lỗ liên tiếp, leverage và allowlist. Chủ dự án phải nhập và xác nhận từng giá trị trước khi mandate được kích hoạt.
 - Các cổng P0 đến P4 vẫn giữ nguyên. Bản này không phải giấy phép bật live.
+- Đề xuất thu hẹp P0 mục 7: nới SL được phép khi phân tích lại thị trường nếu Risk Engine vẫn `APPROVED` (loss budget, daily loss, liquidation buffer, max risk). Vẫn cấm nới SL / tăng size / mở lệnh mới để gỡ lỗ khi đã vượt hoặc sẽ vượt hard limit. **Chưa chốt;** [`zone-policy-decisions.md`](zone-policy-decisions.md) vẫn ghi cấm nới SL tăng rủi ro.
 
 Tự chủ nghĩa là AI được tự quyết trong mandate. AI không có quyền thay đổi mandate, thêm vốn, nới giới hạn, mở rộng allowlist hay bỏ qua Risk Engine. Trong P0/P1, AI vẫn chỉ tạo proposal; quyền tự mở vị thế chỉ bật sau khi các cổng đạt và có xác nhận riêng.
 
@@ -74,6 +75,7 @@ Agent được cấp một `trading mandate` bất biến cho mỗi episode ho�
 - `allow_average_down` và plan DCA cụ thể nếu được phép.
 - Quy tắc reset ngày và cách tính realized/unrealized PnL, phí, funding.
 - Tốc độ đặt lệnh tối đa theo khoảng thời gian.
+- `position_review_interval`: chu kỳ quét/tối ưu vị thế do người dùng đặt, đơn vị **phút**, số nguyên **1–240**. Hệ thống gợi ý 5 / 15 / 30 / 60 phút; gợi ý không tự lưu, không điền sẵn. 15 phút là ví dụ, không phải mặc định.
 - Loại lệnh được phép.
 - Bắt buộc có stop-loss, take-profit hoặc emergency policy theo chế độ đã chọn.
 - Thời gian không được giao dịch, nếu có.
@@ -89,7 +91,7 @@ Các giá trị trên do người dùng hoặc policy đã duyệt đặt trư�
 4. Khi chạm hard limit, hệ thống hủy entry/DCA chưa khớp, chặn lệnh làm tăng size và chạy emergency policy đã duyệt.
 5. Khi đạt `daily_loss_limit`, hệ thống phải khóa entry mới; nếu mandate chọn `EMERGENCY_FLATTEN` thì hủy lệnh chờ và đóng/giảm vị thế theo policy.
 6. Khi đạt `max_consecutive_losses`, hệ thống chuyển `COOLDOWN`, khóa entry mới và không được reset bằng cách đổi symbol, zone, model hoặc strategy.
-7. Không được nới SL theo hướng tăng rủi ro, tăng size để bù lỗ, hoặc mở lệnh mới chỉ để gỡ một lệnh đang lỗ. DCA/average-down chỉ hợp lệ khi mandate cho phép và plan đã được kiểm tra.
+7. Không được tăng size để bù lỗ, hoặc mở lệnh mới chỉ để gỡ một lệnh đang lỗ. DCA/average-down chỉ hợp lệ khi mandate cho phép và plan đã được kiểm tra. Nới SL (đưa stop xa giá hơn) **được phép trong dự thảo này** nếu SL mới vẫn pass Risk Engine: remaining loss-to-SL không vượt `zone_loss_limit` / daily loss / max risk, còn buffer thanh lý, không `STOPPING`/`UNKNOWN`. Nới SL để né stop khi đã chạm hoặc sẽ vượt hard limit thì từ chối. Điểm này khác P0 mục 7 cho tới khi chốt.
 8. Khi không xác nhận được trạng thái sau khi gửi lệnh, chuyển sang `UNKNOWN`, không gửi lệnh bù hoặc lệnh mới dựa trên giả định.
 9. Không cấp lại loss budget sau khi giảm size hoặc đóng một phần.
 10. Không coi loss limit là cam kết lỗ thực tế tuyệt đối. Gap, slippage, phí, funding, lỗi sàn và thanh lý có thể làm vượt ngưỡng.
@@ -154,6 +156,46 @@ Mỗi chu kỳ Agent:
 
 Agent không được tự gọi endpoint Bitget tùy ý. Agent chỉ được yêu cầu các tool nội bộ đã allowlist như `read_market_snapshot`, `read_account_state`, `propose_order`, `request_reduce`, `request_close` và `cancel_pending_order`. Các tool gửi lệnh phải tự gọi Risk Engine, không tin vào việc Agent đã tự kiểm tra.
 
+### 5.3 Dashboard sàn và chu kỳ quét vị thế
+
+Đây là **dự thảo**. Dashboard hiện số sàn là một việc; chu kỳ quét/tối ưu là việc khác. Không gộp thành một vòng chờ hết giờ mới xem giá.
+
+Như bảng điều khiển xe: luôn thấy tốc độ và số xăng. Còn dừng nghỉ để xem có cần đổ thêm, đổ bớt hay chỉnh hành trình thì theo lịch người lái đặt. Phanh khẩn cấp không đợi tới trạm nghỉ.
+
+**Dashboard (Tổng quan)**
+
+Người dùng cần bảng hiện **vị thế đang mở** và **lệnh chờ** đúng với Bitget, kèm tài sản/equity nếu lấy được. Đây là “thấy realtime”: số trên bảng là số sàn, không phải mock.
+
+- Vào hệ thống / mở Tổng quan: GET snapshot account, vị thế, lệnh chờ, fills gần nhất; reconcile với state local.
+- Thiếu, stale hoặc `UNKNOWN`: tab rỗng rõ hoặc báo lỗi, không bịa số, không tăng rủi ro.
+- Cách kéo số (REST poll hay WebSocket) **chưa chốt**. Adapter GET-only **đã có**; frontend Tổng quan **đã nối GET Demo** một lần + làm mới tay, không poll (account, vị thế, lệnh chờ, fills gần nhất). Tab Đối soát so zone local với số sàn, chỉ đọc, không POST, không chạy PaperReconcile. WebSocket production **chưa có**.
+
+**Đồng hồ bảo vệ (nhanh, không theo chu kỳ quét)**
+
+Mark, fill, SL, cảnh báo thanh lý, timeout, `UNKNOWN`, kill switch. Không chờ hết `position_review_interval`.
+
+**Chu kỳ quét = phân tích lại rồi ra phương án (người dùng đặt giờ)**
+
+15 phút chỉ là ví dụ. Người dùng set `position_review_interval` (phút, 1–240); hệ thống gợi ý sẵn 5 / 15 / 30 / 60 phút, gợi ý không tự lưu. Form Mandate **đã có** field; vòng quét paper **đã có** CLI tick/loop local ([`trading/paper_scan.py`](../trading/paper_scan.py)), `plan_actions` 0–N bước. Mặc định không POST; `--place-orders --i-confirm-demo` POST Demo trong whitelist mandate.
+
+Mỗi lần tới giờ **không** máy móc cắt hay sửa lệnh, cũng **không** khóa sẵn “chỉ một hành động” hay “phải gói hết”. Phải phân tích lại thị trường rồi ra phương án **theo tình huống**, có schema, `valid_until`, qua Risk Engine.
+
+Như tái khám: hôm nay giữ nguyên, hôm sau siết SL, lúc khác cắt một phần rồi dời TP. Toa thuốc đổi theo bệnh; không kê vượt hạn mức.
+
+1. Load snapshot vị thế, lệnh chờ, thị trường; kiểm tra freshness.
+2. Phân tích: vị thế còn khớp luận điểm không? Biến động, funding, khoảng cách SL/TP, liquidation, remaining budget.
+3. Chọn 0, 1 hoặc nhiều hành động trong cùng plan version, miễn cùng thesis và từng bước pass Risk Engine. Ví dụ: chỉ `NO_TRADE`; chỉ đổi SL; cắt một phần + dời TP; DCA + nới SL (nếu còn trong rule). Không có menu cố định theo chu kỳ.
+4. Risk Engine duyệt **từng** hành động. Phần bị từ chối không gửi; không tự bịa hành động thay thế ngoài phương án.
+5. Linh hoạt trong mandate, không linh hoạt ngoài rule. Hết giờ không flatten. Không tăng size / mở lệnh mới để gỡ lỗ.
+6. Nới SL: được nếu SL mới vẫn trong rule (mục 4.7).
+7. Stale, `UNKNOWN`/`STOPPING`, hoặc còn intent chưa reconcile → `NO_TRADE`.
+
+Schema mục 6 giữ một `action` cho bước đơn. Combo dùng `metadata.plan_actions` (1–4 bước, cùng thesis); từng bước qua Risk Engine. Paper **đã code**. Demo POST place/cancel/close trong whitelist khi scan CLI `--place-orders --i-confirm-demo`; OPEN kèm TPSL `pos_loss`; GET reconcile sau gửi; `ADJUST_SL` vẫn dry-run. Kill flatten whitelist không qua AI.
+
+`REDUCE` khác `CLOSE`: `CLOSE` đóng hết. Ví dụ long 0.01 BTC, `REDUCE` 0.003 thì còn 0.007. DCA là thêm size, chỉ khi `allow_average_down`.
+
+Frontend local **đã nối GET Demo** lên Tổng quan (đợt A + fills/đối soát): `GET /api/bitget-snapshot` spawn CLI, không poll snapshot; fills từ `/order/fills`; đối soát UI với zone local. Chu kỳ Demo giám sát: `POST /api/demo-cycle` → [`trader/demo_scan_cli.py`](../trader/demo_scan_cli.py) `cycle`, xác nhận Demo, GET mới, sổ equity (bootstrap ngày đầu), protect flatten opt-in, scan nếu tới giờ; POST chỉ whitelist; Chạy/Dừng timer, không tự loop khi mở trang. Tick cũ `POST /api/demo-scan` vẫn còn. Cycle gọi provider đã cấu hình khi scan tới giờ ([`ai_proposal/adapter.py`](../ai_proposal/adapter.py)); frontend không còn phiếu intent; CLI `--proposal` vẫn thắng AI; lỗi/timeout/sai schema → `NO_TRADE`. Hạn mức lệnh lấy từ Mandate. Chu kỳ quét paper **đã có** CLI local (đợt C): tới giờ gọi `PaperAgent.run()`; chưa tới giờ / stale / `UNKNOWN` → `NO_TRADE`; hết giờ không flatten. Đợt D paper: combo `plan_actions`, `ADJUST_SL` trong hạn mức, AUTONOMOUS OPEN local. Dispatcher Demo: mặc định dry-run; scan CLI `--place-orders --i-confirm-demo` POST Demo chỉ symbol trong `allowed_symbols`; cùng `client_oid` không POST lại; `UNKNOWN` chuyển `paper_unknown`. Đồng hồ bảo vệ paper **đã có** CLI local (tách scan, module không POST); demo cycle có thể flatten khi trigger. WebSocket **chưa có**. Live **chưa**.
+
 ## 6. Schema quyết định tối thiểu
 
 ```json
@@ -170,7 +212,10 @@ Agent không được tự gọi endpoint Bitget tùy ý. Agent chỉ được y
   "thesis": ["string"],
   "risk_factors": ["string"],
   "confidence": 0.0,
-  "valid_until": "ISO-8601 timestamp"
+  "valid_until": "ISO-8601 timestamp",
+  "plan_actions": [
+    {"action": "REDUCE|ADJUST_SL|...", "size": "decimal?", "stop_loss": "decimal?"}
+  ]
 }
 ```
 
@@ -180,6 +225,7 @@ Quy tắc schema:
 - `confidence` chỉ là tín hiệu tham khảo, không thay thế Risk Engine.
 - `valid_until` bắt buộc để tránh thực thi quyết định cũ.
 - `NO_TRADE` không được tạo order intent.
+- `plan_actions` tùy chọn, 1–4 bước cùng thesis; paper đọc từ `metadata.plan_actions`. Bước bị từ chối không gửi và không bịa thay thế.
 - Action, symbol, side, loại lệnh và quantity phải nằm trong mandate.
 - Thiếu trường, thêm trường ngoài schema, giá trị không hợp lệ hoặc lý do mâu thuẫn với action thì từ chối.
 
@@ -298,6 +344,9 @@ Mỗi lần tăng symbol, vốn, leverage hoặc quyền hành động phải t�
 10. Cho phép average-down/DCA không, và nếu có thì plan nào được duyệt?
 11. Chọn Gemini native, OpenAI-compatible, hay cho phép cả hai ngay từ MVP?
 12. Các giá trị `TBD` phải được lưu trong config version và từ chối bật live khi chưa điền đủ hay dùng giá trị mặc định an toàn?
+13. Preset/min/max của `position_review_interval`: **đã chốt trên form** — phút, 1–240; gợi ý 5/15/30/60 không tự lưu. Vòng quét paper CLI local **đã có** (`plan_actions`, không POST).
+14. Dashboard vị thế/lệnh chờ kéo số bằng REST poll hay WebSocket? Tần suất làm mới bảng có tách khỏi chu kỳ quét không?
+15. Số hành động mỗi lần quét: **đã rõ — linh hoạt theo tình huống** (0, 1 hoặc nhiều). Paper dùng `metadata.plan_actions`. Nới SL paper theo mục 4.7 nếu remaining loss-to-SL trong hard limit; P0 mục 7 **chưa sửa**.
 
 ## 13. Ràng buộc triển khai
 

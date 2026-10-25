@@ -106,11 +106,17 @@ def intent_from_proposal(
     """Map an approved proposal to a paper intent; never dispatch to an exchange."""
     if proposal.action in {"NO_TRADE", "HOLD"}:
         return None
-    if proposal.action not in {"OPEN", "CLOSE", "REDUCE"}:
+    if proposal.action not in {"OPEN", "CLOSE", "REDUCE", "ADJUST_SL", "CANCEL"}:
         raise PaperIntentError(f"paper does not map action {proposal.action}")
     metadata = dict(proposal.metadata)
     order_type = str(metadata.get("order_type", "limit")).strip().lower()
-    default_role = "entry" if proposal.action == "OPEN" else "reduce"
+    default_role = {
+        "OPEN": "entry",
+        "CLOSE": "reduce",
+        "REDUCE": "reduce",
+        "ADJUST_SL": "adjust_sl",
+        "CANCEL": "cancel",
+    }[proposal.action]
     order_role = str(metadata.get("order_role", default_role)).strip().lower()
     reduce_only = True if proposal.action in {"CLOSE", "REDUCE"} else bool(metadata.get("reduce_only", False))
     if proposal.action in {"CLOSE", "REDUCE"} and not reduce_only:

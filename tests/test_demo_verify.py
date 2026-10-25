@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from trader.bitget_readonly import LiveModeDisabled, ReadOnlyCredentials
@@ -26,14 +27,22 @@ from trader.demo_verify_cli import run as demo_verify_cli_run
 
 NOW = "2026-10-22T06:00:00Z"
 SYMBOL = "BTCUSDT"
+COMMITTED_EVIDENCE = Path(__file__).resolve().parents[1] / "evidence" / "demo-verify" / "2026-10-22-btcusdt.jsonl"
+COMMITTED_D7_D10 = Path(__file__).resolve().parents[1] / "evidence" / "demo-verify" / "2026-10-22-btcusdt-d7-d10.jsonl"
+COMMITTED_D11_D15 = Path(__file__).resolve().parents[1] / "evidence" / "demo-verify" / "2026-10-22-btcusdt-d11-d15.jsonl"
 ACCOUNTS = "/api/v2/mix/account/accounts?productType=USDT-FUTURES"
 POSITIONS = "/api/v2/mix/position/all-position?productType=USDT-FUTURES&marginCoin=USDT"
 PENDING = "/api/v2/mix/order/orders-pending?productType=USDT-FUTURES"
+FILLS = "/api/v2/mix/order/fills?productType=USDT-FUTURES&limit=20&symbol=BTCUSDT"
 TICKER = "/api/v2/mix/market/ticker?productType=USDT-FUTURES&symbol=BTCUSDT"
 CONTRACTS = "/api/v2/mix/market/contracts?productType=USDT-FUTURES&symbol=BTCUSDT"
 ACCOUNT_SYMBOL = "/api/v2/mix/account/account?productType=USDT-FUTURES&symbol=BTCUSDT&marginCoin=USDT"
 PLACE = "/api/v2/mix/order/place-order"
+PLACE_TPSL = "/api/v2/mix/order/place-tpsl-order"
 CANCEL = "/api/v2/mix/order/cancel-order"
+CANCEL_PLAN = "/api/v2/mix/order/cancel-plan-order"
+DETAIL = "/api/v2/mix/order/detail"
+PLAN = "/api/v2/mix/order/orders-plan-pending?productType=USDT-FUTURES&planType=profit_loss&symbol=BTCUSDT"
 
 
 class FakeTransport:
@@ -76,9 +85,11 @@ def baseline_ok(**overrides):
         ACCOUNTS: ok([{"marginCoin": "USDT", "accountEquity": "1000", "marginMode": "isolated"}]),
         POSITIONS: ok([]),
         PENDING: ok([]),
+        FILLS: ok({"fillList": []}),
         TICKER: ok([{"lastPr": "100.0", "markPrice": "100.0"}]),
         CONTRACTS: ok([contract()]),
         ACCOUNT_SYMBOL: ok({"marginMode": "isolated", "posMode": "hedge_mode", "accountEquity": "1000"}),
+        PLAN: ok([]),
     }
     payload.update(overrides)
     return payload
@@ -90,6 +101,7 @@ def make_client(responses, allow_post=False, post_handler=None, environ=None):
         credentials=ReadOnlyCredentials("public-key", "secret-value", "pass-value"),
         transport=transport,
         clock=lambda: 1700000000,
+        sleeper=lambda _seconds: None,
         allow_post=allow_post,
         environ=environ or {"BITGET_ENV": "demo"},
     )
@@ -154,6 +166,9 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(by_id["D5"].verdict, "BLOCKED")
         self.assertEqual(by_id["D5"].dispatch, "VERIFIED_NOT_RECEIVED")
         self.assertEqual(by_id["D7"].verdict, "BLOCKED")
+        self.assertEqual(by_id["D11"].verdict, "BLOCKED")
+        self.assertEqual(by_id["D14"].verdict, "UNKNOWN")
+        self.assertEqual(by_id["D15"].verdict, "UNKNOWN")
         self.assertTrue(all(call[0] == "GET" for call in transport.calls))
         self.assertTrue(all(call[2]["paptrading"] == "1" for call in transport.calls))
         dump = json.dumps(report.to_dict())
@@ -195,9 +210,12 @@ class PlaceCancelTests(unittest.TestCase):
             payload = json.loads(body)
             if path == PLACE:
                 self.assertEqual(payload["marginMode"], "isolated")
-                self.assertEqual(payload["orderType"], "limit")
-                self.assertEqual(payload["tradeSide"], "open")
+                self.assertIn(payload["orderType"], {"limit", "market"})
+                if payload["orderType"] == "limit" and payload.get("tradeSide") == "open":
+                    self.assertEqual(payload["tradeSide"], "open")
                 return ok({"orderId": "11111111", "clientOid": payload["clientOid"]})
+            if path in {PLACE_TPSL, CANCEL_PLAN, "/api/v2/mix/order/close-positions"}:
+                return ok({"orderId": "plan-1", "clientOid": payload.get("clientOid")})
             self.assertEqual(path, CANCEL)
             state["cancelled"] = True
             return ok({"orderId": "11111111", "clientOid": payload["clientOid"]})
@@ -215,6 +233,7 @@ class PlaceCancelTests(unittest.TestCase):
             credentials=ReadOnlyCredentials("public-key", "secret-value", "pass-value"),
             transport=sequenced,
             clock=lambda: 1700000000,
+            sleeper=lambda _seconds: None,
             allow_post=True,
             environ={"BITGET_ENV": "demo"},
         )
@@ -264,6 +283,121 @@ class PlaceCancelTests(unittest.TestCase):
         self.assertTrue(all(item["method"] != "POST" for item in client.calls))
 
 
+class FillPathTests(unittest.TestCase):
+    def test_d7_partial_d8_matrix_d9_reject_d10_close(self):
+        zone = "demo-verify"
+        d7 = verify_client_oid(zone, "entry", 7)
+        d8 = verify_client_oid(zone, "entry", 8)
+        missing = verify_client_oid(zone, "entry", 80)
+        d9 = verify_client_oid(zone, "entry", 9)
+        d10_open = verify_client_oid(zone, "entry", 10)
+        d10_close = verify_client_oid(zone, "reduce", 10)
+        d5 = verify_client_oid(zone, "entry", 1)
+        state = {"cancelled": set(), "long": "0"}
+        orders = {}
+
+        def post_handler(method, path, headers, body):
+            payload = json.loads(body)
+            oid = str(payload.get("clientOid") or "")
+            if path == PLACE:
+                if oid == d9 and oid in orders:
+                    return {"code": "43001", "msg": "duplicate"}
+                orders[oid] = payload
+                if payload.get("tradeSide") == "close":
+                    self.assertEqual(payload.get("tradeSide"), "close")
+                    self.assertNotIn("reduceOnly", payload)
+                    self.assertEqual(payload.get("side"), "buy")
+                    state["long"] = "0"
+                elif oid in {d7, d10_open} or (
+                    payload.get("orderType") == "market" and payload.get("side") == "buy"
+                ):
+                    state["long"] = payload["size"]
+                return ok({"orderId": f"ord-{oid[-6:]}", "clientOid": oid})
+            if path == PLACE_TPSL:
+                state["tpsl"] = payload
+                return ok({"orderId": f"plan-{oid[-6:]}", "clientOid": oid})
+            if path == CANCEL_PLAN:
+                self.assertTrue(payload.get("orderIdList"))
+                self.assertIn(payload.get("planType"), {"pos_loss", "loss_plan", "profit_loss"})
+                return ok({"clientOid": oid})
+            if path == "/api/v2/mix/order/close-positions":
+                state["long"] = "0"
+                return ok({})
+            self.assertEqual(path, CANCEL)
+            state["cancelled"].add(oid)
+            return ok({"orderId": "x", "clientOid": oid})
+
+        inner = FakeTransport(baseline_ok(), post_handler=post_handler)
+
+        def sequenced(method, path, headers, body, timeout):
+            if timeout is not None and timeout < 0.05:
+                raise TimeoutError("timed out")
+            if method == "GET" and path.startswith(DETAIL):
+                inner.calls.append((method, path, dict(headers), body))
+                if f"clientOid={missing}" in path:
+                    return {"code": "43011", "msg": "not found"}
+                oid = d5
+                for candidate in (d7, d8, d9, d10_open, d10_close, d5):
+                    if f"clientOid={candidate}" in path:
+                        oid = candidate
+                        break
+                if oid == d7 and oid not in state["cancelled"]:
+                    return ok({
+                        "status": "partially_filled",
+                        "clientOid": oid,
+                        "orderId": "77777777",
+                        "size": "0.002",
+                        "accBaseVolume": "0.001",
+                        "priceAvg": "100.2",
+                    })
+                status = "canceled" if oid in state["cancelled"] else "live"
+                return ok({"status": status, "clientOid": oid, "orderId": "11111111", "size": "0.001", "accBaseVolume": "0"})
+            if method == "GET" and path.startswith("/api/v2/mix/position/all-position"):
+                inner.calls.append((method, path, dict(headers), body))
+                if Decimal(state["long"]) > 0:
+                    return ok([{"symbol": "BTCUSDT", "holdSide": "long", "total": state["long"], "marginMode": "isolated"}])
+                return ok([])
+            if method == "GET" and path.startswith("/api/v2/mix/order/orders-plan-pending"):
+                inner.calls.append((method, path, dict(headers), body))
+                tpsl = state.get("tpsl")
+                if not tpsl:
+                    return ok([])
+                return ok([{
+                    "symbol": "BTCUSDT",
+                    "clientOid": tpsl.get("clientOid"),
+                    "triggerType": "mark_price",
+                    "planType": tpsl.get("planType"),
+                }])
+            return inner(method, path, headers, body, timeout)
+
+        client = DemoVerifyClient(
+            credentials=ReadOnlyCredentials("public-key", "secret-value", "pass-value"),
+            transport=sequenced,
+            clock=lambda: 1700000000,
+            sleeper=lambda _seconds: None,
+            allow_post=True,
+            environ={"BITGET_ENV": "demo"},
+        )
+        report = run_demo_verify(client, symbol=SYMBOL, zone_id=zone, now=NOW, place_orders=True)
+        by_id = cases_by_id(report)
+        self.assertEqual(by_id["D5"].verdict, "PASS")
+        self.assertEqual(by_id["D6"].verdict, "PASS")
+        self.assertEqual(by_id["D7"].verdict, "PASS")
+        self.assertEqual(by_id["D8"].verdict, "PASS")
+        self.assertEqual(by_id["D9"].verdict, "PASS")
+        self.assertEqual(by_id["D9"].evidence["conclusion"], "no-duplicate-rejected")
+        self.assertEqual(by_id["D10"].verdict, "PASS")
+        self.assertTrue(by_id["D10"].evidence["other_leg_unchanged"])
+        self.assertEqual(by_id["D11"].verdict, "PASS")
+        self.assertEqual(by_id["D11"].evidence.get("plan_type"), "pos_loss")
+        self.assertIn(by_id["D12"].verdict, {"PASS", "UNKNOWN"})
+        self.assertIn(by_id["D13"].verdict, {"PASS", "UNKNOWN"})
+        self.assertEqual(by_id["D15"].verdict, "UNKNOWN")
+        dump = json.dumps(report.to_dict())
+        self.assertNotIn("secret-value", dump)
+        self.assertNotIn("public-key", dump)
+
+
 class CliTests(unittest.TestCase):
     def test_cli_get_only_json(self):
         client, transport = make_client(baseline_ok())
@@ -298,6 +432,82 @@ class CliTests(unittest.TestCase):
                 code = demo_verify_cli_run(["run", "--symbol", "BTCUSDT", "--json"])
         self.assertEqual(code, 2)
         self.assertIn("LiveModeDisabled", stdout.getvalue())
+
+
+class CommittedEvidenceTests(unittest.TestCase):
+    def test_demo_d0_d6_file_exists_and_stays_redacted(self):
+        self.assertTrue(COMMITTED_EVIDENCE.is_file(), "committed Demo D0-D6 evidence is missing")
+        records = [
+            json.loads(line)
+            for line in COMMITTED_EVIDENCE.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertGreaterEqual(len(records), 1)
+        first_d2 = records[0]["summary"]["D2"]
+        last = records[-1]
+        self.assertEqual(last["symbol"], "BTCUSDT")
+        self.assertEqual(last["product_type"], "USDT-FUTURES")
+        self.assertEqual(last["paptrading"], "1")
+        for case_id in ("D0", "D1", "D2", "D3", "D4", "D5", "D6"):
+            self.assertEqual(last["summary"][case_id], "PASS")
+        self.assertEqual(first_d2, "FAIL")
+        blob = COMMITTED_EVIDENCE.read_text(encoding="utf-8")
+        for needle in ("ACCESS-KEY", "ACCESS-SIGN", "ACCESS-PASSPHRASE", "Bearer "):
+            self.assertNotIn(needle, blob)
+        for record in records:
+            for case in record.get("cases", []):
+                client_oid = (case.get("evidence") or {}).get("client_oid")
+                if client_oid:
+                    self.assertIn("…", str(client_oid))
+
+    def test_demo_d7_d10_file_exists_and_stays_redacted(self):
+        self.assertTrue(COMMITTED_D7_D10.is_file(), "committed Demo D7-D10 evidence is missing")
+        records = [
+            json.loads(line)
+            for line in COMMITTED_D7_D10.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(records), 1)
+        last = records[0]
+        self.assertEqual(last["symbol"], "BTCUSDT")
+        self.assertEqual(last["paptrading"], "1")
+        summary = last["summary"]
+        self.assertEqual(summary["D7"], "UNKNOWN")
+        for case_id in ("D8", "D9", "D10"):
+            self.assertEqual(summary[case_id], "PASS")
+        blob = COMMITTED_D7_D10.read_text(encoding="utf-8")
+        for needle in ("ACCESS-KEY", "ACCESS-SIGN", "ACCESS-PASSPHRASE", "Bearer "):
+            self.assertNotIn(needle, blob)
+        for case in last.get("cases", []):
+            client_oid = (case.get("evidence") or {}).get("client_oid")
+            if client_oid:
+                self.assertIn("…", str(client_oid))
+
+    def test_demo_d11_d15_file_exists_and_stays_redacted(self):
+        self.assertTrue(COMMITTED_D11_D15.is_file(), "committed Demo D11-D15 evidence is missing")
+        records = [
+            json.loads(line)
+            for line in COMMITTED_D11_D15.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(records), 1)
+        last = records[0]
+        self.assertEqual(last["symbol"], "BTCUSDT")
+        self.assertEqual(last["paptrading"], "1")
+        summary = last["summary"]
+        self.assertEqual(summary["D11"], "PASS")
+        self.assertEqual(summary["D12"], "PASS")
+        self.assertEqual(summary["D13"], "PASS")
+        self.assertEqual(summary["D7"], "UNKNOWN")
+        self.assertEqual(summary["D14"], "UNKNOWN")
+        self.assertEqual(summary["D15"], "UNKNOWN")
+        blob = COMMITTED_D11_D15.read_text(encoding="utf-8")
+        for needle in ("ACCESS-KEY", "ACCESS-SIGN", "ACCESS-PASSPHRASE", "Bearer "):
+            self.assertNotIn(needle, blob)
+        for case in last.get("cases", []):
+            client_oid = (case.get("evidence") or {}).get("client_oid")
+            if client_oid:
+                self.assertIn("…", str(client_oid))
 
 
 if __name__ == "__main__":

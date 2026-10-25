@@ -7,4 +7,124 @@
 # `status`: active | retired
 # no_trade bắt buộc có `condition` máy đọc được.
 # Không ghi risk limit, leverage, margin, vốn hoặc max_zones tại đây.
-entries: []
+#
+# Nạp 2026-10-23 via mcp_chat: diễn giải từ profile/report.md
+# (2026-09-19 → 2026-10-19). Bỏ mọi số đòn bẩy / notional / vốn.
+# Chưa nối vào adapter AI / chu kỳ Demo.
+entries:
+  - id: "prefer-btc-eth"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 80
+    rule: "Ưu tiên BTCUSDT và ETHUSDT. Cặp khác chỉ khi người dùng duyệt vào allowlist; không coi alt một phiên là phong cách mặc định."
+    tags: ["symbol", "btc", "eth"]
+
+  - id: "fade-1h-mean-revert"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 90
+    rule: "Thiên mean-revert / micro-grid: fade nhịp 1h vừa chạy, không đuổi trend. Ưu tiên vào ngược nhịp ngắn hạn khi còn trong zone."
+    tags: ["entry", "mean-revert", "1h"]
+
+  - id: "prefer-limit-maker"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 70
+    rule: "Ưu tiên lệnh limit, vào kiểu maker. Market chỉ khi flatten bảo vệ hoặc đóng khẩn."
+    tags: ["order-type", "limit", "maker"]
+
+  - id: "micro-dca-spacing"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 75
+    rule: "DCA khi giá đi ngược: khoảng lớp quanh 0.11–0.27% (trung vị ~0.18%). Size lớp sau ~0.87 lần lớp trước, không martingale. Số lớp thường vài lớp; không biến một zone thành lưới dày vô hạn."
+    tags: ["dca", "spacing"]
+
+  - id: "allow-hedge-overlap"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 60
+    rule: "Hedge mode: được mở long và short chồng trên cùng symbol khi luận điểm trung tính / lưới. Không bắt buộc luôn một chiều."
+    tags: ["hedge", "both-sides"]
+
+  - id: "scale-out-small-green"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 85
+    rule: "Ưu tiên scale-out hơn stop-out. Chốt từng phần quanh +0.2–1.2% so với giá trung bình (trung vị ~0.45%)."
+    tags: ["exit", "scale-out", "tp"]
+
+  - id: "reduce-red-to-recycle"
+    version: 1
+    kind: "preference"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 65
+    rule: "Được giảm size khi vị thế còn đỏ để thu hồi sức mua, gỡ dần khi giá nảy. Không mặc định gồng nguyên size chờ hòa."
+    tags: ["reduce", "recycle"]
+
+  - id: "no-inferred-systematic-stop"
+    version: 1
+    kind: "note"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 50
+    rule: "Lịch sử không cho ra một khoảng stop cố định. Không suy SL% từ profile này. Lệnh bảo vệ thuộc Mandate/zone, không thuộc file phong cách."
+    tags: ["stop", "note"]
+
+  - id: "hold-and-regime-note"
+    version: 1
+    kind: "note"
+    source: "user"
+    channel: "mcp_chat"
+    status: "active"
+    effective_from: "2026-10-23T23:31:00+07:00"
+    effective_to: null
+    scope: ["all"]
+    priority: 40
+    rule: "Thời gian giữ trung vị khoảng vài giờ, có phiên kéo dài nhiều ngày. Ngày giao dịch dày (như 2026-10-19) là chế độ cao, không lấy làm nhịp mặc định cả tháng."
+    tags: ["hold", "regime"]

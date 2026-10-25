@@ -2,7 +2,7 @@
 
 - Trạng thái: Dự thảo cập nhật theo mandate cấp vốn và quyền AI tự chủ; phần local Demo/dry-run hiện có đã triển khai
 - Phạm vi: Cơ chế người dùng tự nhập và quản lý các chỉ số risk trong frontend local Demo/dry-run
-- Không kết nối Bitget, không gửi lệnh và không bật live
+- GET Demo từ Tổng quan, không gửi lệnh; form Kết nối chỉ ghi Demo key vào `.env` local. Không bật live
 
 ## 1. Mục tiêu
 
@@ -22,7 +22,8 @@ Người dùng có thể tự cấu hình các chỉ số theo khẩu vị rủi
 - `drawdown_limit_pct` hoặc `drawdown_limit_usdt`: người dùng tự nhập.
 - `drawdown_reference`: bắt buộc người dùng chọn trước khi kích hoạt drawdown gate; không tự suy đoán mốc tính.
 - `max_leverage`: người dùng tự nhập.
-- `symbol_allowlist`: người dùng tự thêm/bỏ symbol. Symbol gợi ý không tự được thêm.
+- `position_review_interval`: người dùng set chu kỳ quét vị thế, đơn vị **phút**, số nguyên **1–240**. Form có nút gợi ý 5 / 15 / 30 / 60; gợi ý chỉ điền ô, không tự lưu, không điền sẵn mặc định. Field nằm trên Mandate; lưu tạo policy version mới. Scheduler paper **đã có** CLI tick/loop local; frontend không tự chạy bot. Chi tiết nghiệp vụ: [`ai-agent-autonomous-trading.md`](ai-agent-autonomous-trading.md) mục 5.3.
+- `symbol_allowlist`: chỉ nhận symbol người dùng đã duyệt (trang Đề xuất cặp: duyệt ứng viên, thêm tay, hoặc gỡ). Lần lưu Mandate đầu được trống; trống thì không tạo zone và AI không được trade. Symbol gợi ý/sàng lọc không tự được thêm. Mỗi lần duyệt, thêm tay hoặc gỡ tạo policy version mới.
 - Các giới hạn daily loss/drawdown áp dụng toàn subaccount/mandate theo scope đã lưu.
 
 ### Cấp zone
@@ -36,16 +37,17 @@ Người dùng có thể tự cấu hình các chỉ số theo khẩu vị rủi
 - `margin_mode = isolated`.
 - Entry/DCA/TP là limit.
 - Strategic stop khi được bật, emergency close và kill switch là market reduce-only.
-- `ai_autonomy` quyết định quyền khởi tạo: `PROPOSAL_ONLY`, `MANAGED_ZONE` hoặc `AUTONOMOUS_WITHIN_MANDATE`. Chọn trên trang Quyền AI, không trên form Mandate. Mode tự chủ không được bật trong frontend local nếu chưa có mandate được xác nhận và cổng kỹ thuật tương ứng. Frontend local không tự giao dịch ở bất kỳ mode nào.
+- `ai_autonomy` quyết định quyền khởi tạo: `PROPOSAL_ONLY`, `MANAGED_ZONE` hoặc `AUTONOMOUS_WITHIN_MANDATE`. Chọn trên trang Quyền AI, không trên form Mandate. Mode tự chủ không được bật nếu chưa có mandate. Frontend không tự POST khi mở trang; tick Demo trên Tổng quan mới được POST whitelist sau xác nhận.
 
 ## 3. Luồng sử dụng
 
-1. Người dùng mở trang Mandate, nhập `granted_capital`, giới hạn subaccount và allowlist, rồi xác nhận/lưu một policy version local. Lần lưu đầu, nếu chưa có quyền AI, frontend gán `MANAGED_ZONE` để object policy đủ schema.
-2. Trang Quyền AI chỉ lưu được sau khi đã có Mandate version. Chọn mode rồi lưu = version mới (copy field khẩu vị). Chưa có Mandate thì control bị disable.
-3. Tạo zone thủ công trên Bàn zone khi đã có policy; mode `AUTONOMOUS_WITHIN_MANDATE` trên frontend local chỉ lưu cấu hình, không tự tạo zone. Zone lưu snapshot policy version tại thời điểm tạo.
-4. Trước khi mandate/zone chuyển ACTIVE, hiển thị tóm tắt để người dùng xác nhận.
-5. Sau khi ACTIVE, snapshot policy không sửa đè; thay đổi được lưu thành version mới và chỉ áp dụng cho episode mới.
-6. Thiếu giá trị bắt buộc, sai số, drawdown chưa có reference hoặc symbol ngoài allowlist thì không cho kích hoạt.
+1. Người dùng mở trang Mandate, nhập `granted_capital` và giới hạn subaccount, rồi xác nhận/lưu một policy version local. Allowlist có thể trống ở bước này. Lần lưu đầu, nếu chưa có quyền AI, frontend gán `MANAGED_ZONE` để object policy đủ schema.
+2. Trang Đề xuất cặp GET public ticker, xếp ứng viên theo khối lượng 24h. Người dùng duyệt mới đưa symbol vào allowlist (version mới). Từ chối thì không vào. Không tự duyệt.
+3. Trang Quyền AI chỉ lưu được sau khi đã có Mandate version. Chọn mode rồi lưu = version mới (copy field khẩu vị). Chưa có Mandate thì control bị disable.
+4. Tạo zone thủ công trên Bàn zone khi đã có policy và allowlist không trống; mode `AUTONOMOUS_WITHIN_MANDATE` trên frontend local chỉ lưu cấu hình, không tự tạo zone. Zone lưu snapshot policy version tại thời điểm tạo.
+5. Trước khi mandate/zone chuyển ACTIVE, hiển thị tóm tắt để người dùng xác nhận.
+6. Sau khi ACTIVE, snapshot policy không sửa đè; thay đổi được lưu thành version mới và chỉ áp dụng cho episode mới.
+7. Thiếu giá trị bắt buộc, sai số, drawdown chưa có reference, allowlist trống hoặc symbol ngoài allowlist thì không cho kích hoạt.
 
 ## 4. Lưu trữ và tính toán
 
@@ -60,7 +62,7 @@ Người dùng có thể tự cấu hình các chỉ số theo khẩu vị rủi
 - Các giới hạn phần trăm/USDT/leverage phải là số hữu hạn và dương khi được bật.
 - Giới hạn có thể tắt chỉ khi policy còn hard loss control khác theo rule đã duyệt.
 - Không tự nới limit, thêm symbol, cấp thêm vốn hoặc kích hoạt policy từ gợi ý.
-- Không được nới SL, gồng lệnh hoặc mở lệnh mới để gỡ lỗ; DCA chỉ hợp lệ khi mandate bật và có plan.
+- Không gồng lệnh hoặc mở lệnh mới để gỡ lỗ; DCA chỉ hợp lệ khi mandate bật và có plan. Paper `ADJUST_SL`: siết luôn được nếu stop hợp lệ; nới được nếu remaining loss-to-SL còn trong hard limit (dự thảo AI mục 4.7). P0 [`zone-policy-decisions.md`](zone-policy-decisions.md) mục 7 vẫn cấm nới SL tăng rủi ro cho tới khi chốt.
 - UI luôn ghi rõ Demo/dry-run và không kết nối sàn.
 
 ## 6. Test case chính
@@ -68,12 +70,13 @@ Người dùng có thể tự cấu hình các chỉ số theo khẩu vị rủi
 1. Lưu và tải lại policy local đã nhập.
 2. Từ chối số âm, số không hữu hạn và giá trị sai định dạng.
 3. Không cho áp dụng policy nếu drawdown đang bật nhưng chưa chọn reference.
-4. Symbol được gợi ý không tự vào allowlist; symbol ngoài allowlist không tạo zone active, kể cả khi AI đề xuất.
+4. Symbol được gợi ý/sàng lọc không tự vào allowlist; user phải duyệt hoặc thêm tay. Symbol ngoài allowlist không tạo zone active, kể cả khi AI đề xuất. Allowlist trống thì không tạo zone.
 5. Mode `AUTONOMOUS_WITHIN_MANDATE` chỉ tạo zone khi có `granted_capital`, mandate đã xác nhận và còn vốn hợp lệ.
 6. Daily loss chạm ngưỡng khóa entry theo `daily_loss_action`; loss streak chạm ngưỡng tạo cooldown.
 7. Zone lưu policy version tại lúc tạo; sửa policy không âm thầm đổi cấu hình zone hiện có.
-8. Policy cũ không có field mới được xử lý an toàn, không làm trang trắng.
+8. Policy cũ không có field mới được xử lý an toàn, không làm trang trắng. Policy cũ thiếu `position_review_interval` vẫn tải; lưu mới thì bắt buộc 1–240 phút.
 9. Không có request mạng ngoài và không tạo lệnh giao dịch.
+10. Nút gợi ý 5/15/30/60 chỉ điền ô chu kỳ quét; không tự lưu policy.
 
 ## 7. Ngoài phạm vi
 

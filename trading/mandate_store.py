@@ -59,6 +59,9 @@ class RecoverySnapshot:
             return None
         return item
 
+    def has_unknown(self) -> bool:
+        return any(item.get("state") in UNKNOWN_PAPER_STATES for item in self.pending_or_unknown)
+
 
 class MandateStore:
     """Facade over P1IntegrationStore for immutable mandate versions."""

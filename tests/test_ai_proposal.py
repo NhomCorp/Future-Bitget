@@ -102,6 +102,29 @@ class ProposalTests(unittest.TestCase):
         codes = {error.code for error in record.validation_errors}
         self.assertTrue({"LOSS_BUDGET_IMMUTABLE", "SL_PCT_IMMUTABLE", "REF_PRICE_IMMUTABLE", "SYMBOL_IMMUTABLE", "SIDE_IMMUTABLE", "STATE_IMMUTABLE", "SIZE_IMMUTABLE", "EXPOSURE_IMMUTABLE"} <= codes)
 
+    def test_open_may_set_size_when_snapshot_is_empty(self) -> None:
+        data = snapshot().to_dict()
+        data["size"] = "0"
+        data["exposure"] = "0"
+        snap = DecisionOpportunitySnapshot.from_dict(data)
+        record = propose(
+            snap,
+            lambda received: candidate(
+                received,
+                size=Decimal("0.03"),
+                exposure=Decimal("0.03") * received.ref_price,
+            ),
+        )
+        self.assertEqual(record.result, RESULT_ACCEPTED)
+
+    def test_reduce_may_use_smaller_size(self) -> None:
+        snap = snapshot()
+        record = propose(snap, lambda received: candidate(received, action="REDUCE", size=Decimal("0.01")))
+        self.assertEqual(record.result, RESULT_ACCEPTED)
+        record = propose(snap, lambda received: candidate(received, action="REDUCE", size=Decimal("0.16")))
+        self.assertEqual(record.result, RESULT_REJECTED)
+        self.assertTrue(any(error.code == "REDUCE_SIZE_INVALID" for error in record.validation_errors))
+
     def test_no_trade_is_explicit(self) -> None:
         record = no_trade_proposal(
             snapshot(),

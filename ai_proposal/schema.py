@@ -15,7 +15,11 @@ SNAPSHOT_SCHEMA_VERSION = "p3.decision-opportunity.v1"
 PROPOSAL_SCHEMA_VERSION = "p3.proposal.v1"
 RESULT_ACCEPTED = "ACCEPTED"
 RESULT_REJECTED = "REJECTED"
-ACTIONS = frozenset({"OPEN", "CLOSE", "REDUCE", "HOLD", "NO_TRADE"})
+ACTIONS = frozenset({"OPEN", "CLOSE", "REDUCE", "HOLD", "NO_TRADE", "ADJUST_SL", "CANCEL"})
+PLAN_ACTIONS_MAX = 4
+_PLAN_STEP_KEYS = frozenset(
+    {"action", "size", "stop_loss", "take_profit", "order_type", "order_role", "reduce_only", "leverage"}
+)
 
 
 def _decimal(value: Decimal | int | str, field_name: str) -> Decimal:
@@ -378,6 +382,72 @@ class ProposalDraft:
             exposure=_decimal(data["exposure"], "exposure"),
             metadata=data.get("metadata", {}),
         )
+
+
+def parse_plan_actions(raw: Any) -> tuple[tuple[dict[str, Any], ...], str | None]:
+    """Parse optional ``metadata.plan_actions``; one decision may list 1-4 steps."""
+    if raw is None:
+        return (), None
+    if not isinstance(raw, list):
+        return (), "PLAN_INVALID"
+    if not raw:
+        return (), "PLAN_EMPTY"
+    if len(raw) > PLAN_ACTIONS_MAX:
+        return (), "PLAN_TOO_LONG"
+    steps: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            return (), "PLAN_INVALID"
+        action = str(item.get("action", "")).strip().upper().replace("-", "_")
+        if action not in ACTIONS:
+            return (), "PLAN_ACTION_INVALID"
+        extra = set(item) - _PLAN_STEP_KEYS
+        if extra:
+            return (), "PLAN_INVALID"
+        step = dict(item)
+        step["action"] = action
+        steps.append(step)
+    return tuple(steps), None
+
+
+def proposal_with_step(proposal: ProposalDraft, index: int, step: Mapping[str, Any]) -> ProposalDraft:
+    """Clone a proposal into one plan step; does not dispatch."""
+    data = dict(proposal.to_dict())
+    data["proposal_id"] = f"{proposal.proposal_id}:s{index}"
+    data["action"] = step["action"]
+    metadata = dict(proposal.metadata)
+    metadata.pop("plan_actions", None)
+    role_by_action = {
+        "OPEN": "entry",
+        "CLOSE": "reduce",
+        "REDUCE": "reduce",
+        "ADJUST_SL": "adjust_sl",
+        "CANCEL": "cancel",
+    }
+    metadata["order_role"] = role_by_action.get(step["action"], "entry")
+    if step["action"] in {"CLOSE", "REDUCE"}:
+        metadata["reduce_only"] = True
+    else:
+        metadata.pop("reduce_only", None)
+    for key in ("stop_loss", "take_profit", "order_type", "order_role", "reduce_only", "leverage"):
+        if key in step:
+            metadata[key] = step[key]
+    if "size" in step:
+        size = step["size"]
+        data["size"] = format(size, "f") if isinstance(size, Decimal) else str(size)
+    data["metadata"] = metadata
+    return ProposalDraft.from_dict(data)
+
+
+def iter_plan_proposals(proposal: ProposalDraft) -> tuple[tuple[ProposalDraft, ...], str | None]:
+    """Expand one proposal into executable steps. Missing list = single action."""
+    raw = proposal.metadata.get("plan_actions")
+    if raw is None:
+        return (proposal,), None
+    steps, error = parse_plan_actions(raw)
+    if error:
+        return (proposal,), error
+    return tuple(proposal_with_step(proposal, index, step) for index, step in enumerate(steps)), None
 
 
 @dataclass(frozen=True)

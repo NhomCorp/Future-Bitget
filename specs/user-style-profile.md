@@ -174,7 +174,7 @@ Hệ thống cung cấp giao diện chat để người dùng yêu cầu phân t
 
 ## 8. Ngoài phạm vi
 
-- Form frontend: làm sau khi Demo ổn.
+- Form frontend local: **đã có** `#/phong-cach` + `GET|POST /api/user-style` (append-only). Spec schema/merge vẫn dự thảo.
 - Tự động trích xuất phong cách từ journal: giữ riêng ở `style_digest.py`.
 - Validation semantic sâu của `condition` (ví dụ kiểm tra event calendar): thuộc module data provider, không thuộc module profile.
 - Mã hóa hoặc bảo mật đặc biệt cho file: file không chứa secret; quyền truy cập file theo OS permission thông thường.

@@ -70,8 +70,10 @@ def make_proposal(snapshot: DecisionOpportunitySnapshot, **overrides) -> Proposa
 class FakeProvider:
     def __init__(self, proposal):
         self.proposal = proposal
+        self.calls = 0
 
     def propose(self, snapshot):
+        self.calls += 1
         return self.proposal
 
 
@@ -120,6 +122,7 @@ class PaperRecoveryTests(unittest.TestCase):
             loss_streak_scope="subaccount",
             loss_streak_cooldown="24h",
             allow_average_down=False,
+            position_review_interval=15,
         )
         values.update(overrides)
         return TradingMandate(**values)
@@ -148,17 +151,21 @@ class PaperRecoveryTests(unittest.TestCase):
         self.assertEqual(recovered.paper_intents[0]["state"], "paper_pending")
         self.assertEqual(MandateStore(self.store).versions("mandate-recover"), (1,))
 
-    def test_timeout_unknown_blocks_same_client_oid_after_restart(self):
+    def test_timeout_unknown_blocks_new_proposal_after_restart(self):
         first = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, self.mandate, now=NOW)
         timed_out = PaperReconcile(self.store).record_timeout(first.intent.client_oid)
         self.assertEqual(timed_out.result, "unknown")
         self.assertTrue(timed_out.requires_reconcile)
         self._reopen()
-        second = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, self.mandate, now=NOW)
-        self.assertEqual(second.intent.client_oid, first.intent.client_oid)
-        self.assertEqual(second.intent.state, "paper_unknown")
+        provider = FakeProvider(make_proposal(self.snapshot, proposal_id="decision-recover-2"))
+        second = PaperAgent(provider, self.store).run(self.snapshot, self.mandate, now=NOW)
+        self.assertIsNone(second.intent)
+        self.assertEqual(provider.calls, 0)
         self.assertEqual(len(self.store.paper_intents("zone-recover")), 1)
-        self.assertTrue(any(event["event"] == "RECONCILE_REQUIRED" for event in self.store.agent_events("zone-recover")))
+        self.assertEqual(self.store.paper_intents("zone-recover")[0]["client_oid"], first.intent.client_oid)
+        self.assertTrue(
+            any(event.get("reason_code") == "RECONCILE_REQUIRED" for event in self.store.agent_events("zone-recover"))
+        )
 
     def test_partial_fill_updates_remaining_and_survives_restart(self):
         first = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, self.mandate, now=NOW)
@@ -208,11 +215,31 @@ class PaperRecoveryTests(unittest.TestCase):
             amount=Decimal("12"),
             reason="episode_loss",
         )
-        exhausted = PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, self.mandate, now=NOW)
+        provider = FakeProvider(make_proposal(self.snapshot, proposal_id="decision-recover-exhausted"))
+        exhausted = PaperAgent(provider, self.store).run(self.snapshot, self.mandate, now=NOW)
         self.assertIsNone(exhausted.intent)
+        self.assertEqual(provider.calls, 0)
         self.assertTrue(
             any(event.get("reason_code") == "LOSS_BUDGET_EXHAUSTED" for event in self.store.agent_events("zone-recover"))
         )
+
+    def test_open_intent_consumes_loss_budget(self):
+        PaperAgent(FakeProvider(make_proposal(self.snapshot)), self.store).run(self.snapshot, self.mandate, now=NOW)
+        recovered = recover_session(self.store, "zone-recover", "mandate-recover")
+        self.assertEqual(recovered.consumed_loss_budget, Decimal("5"))
+        self.assertEqual(recovered.remaining_loss_budget, Decimal("15"))
+
+    def test_latest_mandate_is_used_for_risk(self):
+        self.store.save_mandate(self.mandate.to_dict())
+        newer = self._mandate(version=2, allowed_symbols=("ETHUSDT",))
+        self.store.save_mandate(newer.to_dict())
+        provider = FakeProvider(make_proposal(self.snapshot))
+        result = PaperAgent(provider, self.store).run(self.snapshot, self.mandate, now=NOW)
+        self.assertEqual(provider.calls, 1)
+        self.assertIsNone(result.intent)
+        self.assertEqual(result.risk_check.result, "REJECTED")
+        self.assertIn("SYMBOL_NOT_ALLOWED", result.risk_check.reason_codes)
+        self.assertEqual(result.risk_check.mandate_version, 2)
 
 
 class ExecutorRecoveryTests(unittest.TestCase):
